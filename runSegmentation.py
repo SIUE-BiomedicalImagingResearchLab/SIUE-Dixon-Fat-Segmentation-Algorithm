@@ -1,7 +1,7 @@
 import numpy
 import constants
 import matplotlib.pyplot as pyplot
-import SimpleITK as sitk
+import itk
 import time
 import pyplotsitkBridge as pypitk
 
@@ -39,12 +39,32 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     waterImageMax = waterImage.max()
     waterImage = (waterImage - waterImageMin) / (waterImageMax - waterImageMin)
 
-    fatImageITK = sitk.GetImageFromArray(fatImage)
-    waterImageITK = sitk.GetImageFromArray(waterImage)
+    tic = time.perf_counter()
+    fatImageITK = itk.GetImageViewFromArray(fatImage)
+    waterImageITK = itk.GetImageViewFromArray(waterImage)
 
+    fatImageITK = itk.Shrink(fatImageITK, [constants.shrinkFactor] * fatImageITK.GetDimension())
+    waterImageITK = itk.Shrink(waterImageITK, [constants.shrinkFactor] * waterImageITK.GetDimension())
+
+    fatImageMask = itk.OtsuThreshold(fatImageITK, 0, 1, 200)
+    waterImageMask = itk.OtsuThreshold(waterImageITK, 0, 1, 200)
+
+    # corrector = itk.N4BiasFieldCorrectionImageFilter()
+    # corrector.Execute(fatImageITK, fatImageMask)
+    # # corrector.GetLog
+    #
+    # corrector = itk.N4BiasFieldCorrectionImageFilter()
+    # corrector.Execute(waterImageITK, waterImageMask)
+    toc = time.perf_counter()
+
+    print('N4ITK bias field correction took %f seconds' % (toc - tic))
+
+    # fatImageITK = sitk.GetImageFromArray(fatImage)
+    # waterImageITK = sitk.GetImageFromArray(waterImage)
+    #
     # fatImageMask = sitk.OtsuThreshold(fatImageITK, 0, 1, 200)
     # waterImageMask = sitk.OtsuThreshold(fatImageITK, 0, 1, 200)
-    #
+
     # fatImageITK = sitk.N4BiasFieldCorrection(fatImageITK, fatImageMask)
     # waterImageITK = sitk.N4BiasFieldCorrection(waterImageITK, waterImageMask)
 
@@ -53,30 +73,30 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     # image processing algorithms require a 2D image, such as morphological
     # operations
     for slice in range(0, fatImage.shape[2]):
-        fatImageSlice = fatImage[:, :, slice]
-        waterImageSlice = waterImage[:, :, slice]
+        # fatImageSlice = fatImage[:, :, slice]
+        # waterImageSlice = waterImage[:, :, slice]
 
         # Retrieve ITK images from the numpy arrays of image slice
         # TODO Switch to using GetImageViewFromArray when ITK 4.12 is available, performs soft copy
-        fatImageSliceITK = sitk.GetImageFromArray(fatImageSlice)
-        waterImageSliceITK = sitk.GetImageFromArray(waterImageSlice)
+        # fatImageSliceITK = sitk.GetImageFromArray(fatImageSlice)
+        # waterImageSliceITK = sitk.GetImageFromArray(waterImageSlice)
 
         # TODO Apply CLAHE for contrast
 
         # TODO Bias error correction in ITK
 
         # img_data = sitk.Cast(img, sitk.sitkFloat32)
-        fatImageSliceITK = sitk.Cast(fatImageSliceITK, sitk.sitkFloat32)
-        waterImageSliceITK = sitk.Cast(waterImageSliceITK, sitk.sitkFloat32)
-
-        fatImageSliceITK = sitk.Shrink(fatImageSliceITK, (4, 4, 4))
-        waterImageSliceITK = sitk.Shrink(waterImageSliceITK, (4, 4, 4))
-
-        fatImageSliceMask = sitk.OtsuThreshold(fatImageSliceITK, 0, 1, 200)
-        waterImageSliceMask = sitk.OtsuThreshold(waterImageSliceITK, 0, 1, 200)
-
-        fatImageSliceITK = sitk.N4BiasFieldCorrection(fatImageSliceITK, fatImageSliceMask)
-        waterImageSliceITK = sitk.N4BiasFieldCorrection(waterImageSliceITK, waterImageSliceMask)
+        # fatImageSliceITK = sitk.Cast(fatImageSliceITK, sitk.sitkFloat32)
+        # waterImageSliceITK = sitk.Cast(waterImageSliceITK, sitk.sitkFloat32)
+        #
+        # fatImageSliceITK = sitk.Shrink(fatImageSliceITK, (4, 4, 4))
+        # waterImageSliceITK = sitk.Shrink(waterImageSliceITK, (4, 4, 4))
+        #
+        # fatImageSliceMask = sitk.OtsuThreshold(fatImageSliceITK, 0, 1, 200)
+        # waterImageSliceMask = sitk.OtsuThreshold(waterImageSliceITK, 0, 1, 200)
+        #
+        # fatImageSliceITK = sitk.N4BiasFieldCorrection(fatImageSliceITK, fatImageSliceMask)
+        # waterImageSliceITK = sitk.N4BiasFieldCorrection(waterImageSliceITK, waterImageSliceMask)
 
         print('Done with slice %i' % (slice))
 

@@ -105,3 +105,6 @@ misc.xml
 
 # Dictionaries contains information and settings for each user
 dictionaries/
+
+# Ignore IML file for project since it contains path dependent information
+*.iml
