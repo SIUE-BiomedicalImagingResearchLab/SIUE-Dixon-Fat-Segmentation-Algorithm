@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# XML file contains inforamtion regarding where Python installation is located, this is computer-dependent
+misc.xml
+
+# Dictionaries contains information and settings for each user
+dictionaries/
