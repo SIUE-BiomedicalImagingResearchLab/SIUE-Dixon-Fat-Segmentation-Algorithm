@@ -6,6 +6,15 @@ from biasCorrection import *
 
 # Segment depots of adipose tissue given Dixon MRI images
 def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
+    # If debug is turned on, then create the directory where the debug files will be saved
+    # The makedirs command is in try/catch because if it already exists, it will throw an exception and we just want
+    # to continue in that case
+    if constants.debug:
+        try:
+            os.makedirs(os.path.join(constants.pathDir, 'debug'))
+        except:
+            pass
+
     # Get the root of the config XML file
     configRoot = config.getroot()
 
@@ -43,53 +52,73 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     fatImage = sitk.RescaleIntensity(fatImage, 0.0, 1.0)
     waterImage = sitk.RescaleIntensity(waterImage, 0.0, 1.0)
 
+    # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    fatImage2 = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
-                            prefix='fatImageBiasCorrection')
-    waterImage2 = correctBias(waterImage, shrinkFactor=constants.shrinkFactor,
-                              prefix='waterImageBiasCorrection')
+    fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
+                           prefix='fatImageBiasCorrection')
+    waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor,
+                             prefix='waterImageBiasCorrection')
     toc = time.perf_counter()
-
     print('N4ITK bias field correction took %f seconds' % (toc - tic))
+
+    if constants.debug:
+        sitk.WriteImage(fatImage, os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
+        sitk.WriteImage(waterImage, os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
+
+
+    # TODO Try doing this on a slice-by-slice basis! Could be faster
+
+    # Segment fat/water images using K-means
+    tic = time.perf_counter()
+    fatImageMask = sitk.ScalarImageKmeans(fatImage, [0.0] * constants.kMeanClusters)
+    waterImageMask = sitk.ScalarImageKmeans(waterImage, [0.0] * constants.kMeanClusters)
+    toc = time.perf_counter()
+    print('K means clustering (clusters = %i) took %f seconds' % (constants.kMeanClusters, toc - tic))
+
+    if constants.debug:
+        sitk.WriteImage(fatImageMask, os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
+        sitk.WriteImage(waterImageMask, os.path.join(constants.pathDir, 'debug', 'waterImageMask.img'))
+
+    i = 4
 
     # Loop through each axial slice of the image.
     # This is easier than performing operations on the entire image since many
     # image processing algorithms require a 2D image, such as morphological
     # operations
     # for slice in range(0, fatImage.shape[2]):
-        # fatImageSlice = fatImage[:, :, slice]
-        # waterImageSlice = waterImage[:, :, slice]
+    # fatImageSlice = fatImage[:, :, slice]
+    # waterImageSlice = waterImage[:, :, slice]
 
-        # fatImageSlice2 = fatImage2[:, :, slice]
-        # waterImageSlice2 = waterImage2[:, :, slice]
+    # fatImageSlice2 = fatImage2[:, :, slice]
+    # waterImageSlice2 = waterImage2[:, :, slice]
 
-        # Retrieve ITK images from the numpy arrays of image slice
-        # TODO Switch to using GetImageViewFromArray when ITK 4.12 is available, performs soft copy
-        # fatImageSliceITK = sitk.GetImageFromArray(fatImageSlice)
-        # waterImageSliceITK = sitk.GetImageFromArray(waterImageSlice)
+    # Retrieve ITK images from the numpy arrays of image slice
+    # TODO Switch to using GetImageViewFromArray when ITK 4.12 is available, performs soft copy
+    # fatImageSliceITK = sitk.GetImageFromArray(fatImageSlice)
+    # waterImageSliceITK = sitk.GetImageFromArray(waterImageSlice)
 
-        # TODO Apply CLAHE for contrast
+    # TODO Apply CLAHE for contrast
 
-        # pyplot.subplot(1, 2, 1)
-        # pyplot.imshow(fatImageSlice, cmap=pyplot.gray())
+    # pyplot.subplot(1, 2, 1)
+    # pyplot.imshow(fatImageSlice, cmap=pyplot.gray())
 
-        # pyplot.subplot(1, 2, 2)
-        # pyplot.imshow(fatImageSlice2, cmap=pyplot.gray())
-        # pypitk.imshow(fatImageSliceITK, cmap=pyplot.gray())
-        # pyplot.title('Slice #%i' % (slice))
-        # pyplot.pause(1.0)
+    # pyplot.subplot(1, 2, 2)
+    # pyplot.imshow(fatImageSlice2, cmap=pyplot.gray())
+    # pypitk.imshow(fatImageSliceITK, cmap=pyplot.gray())
+    # pyplot.title('Slice #%i' % (slice))
+    # pyplot.pause(1.0)
 
-        # print('Done with slice %i' % (slice))
+    # print('Done with slice %i' % (slice))
 
-        # if constants.showBodyMask:
-            # Show the matter slice and body mask to see how well it fits
-            # Set title to slice number to record any odd slices and draw now so that it draws the title
-            # pyplot.imshow(fatImageSlice, cmap=pyplot.gray())
-            # pyplot.title('Slice #%i' % (slice))
+    # if constants.showBodyMask:
+    # Show the matter slice and body mask to see how well it fits
+    # Set title to slice number to record any odd slices and draw now so that it draws the title
+    # pyplot.imshow(fatImageSlice, cmap=pyplot.gray())
+    # pyplot.title('Slice #%i' % (slice))
 
-            # TODO Get imshowpair to work in Python
-            # imshowpair(waterImageSlice, bodyMask
-            # {slice});
+    # TODO Get imshowpair to work in Python
+    # imshowpair(waterImageSlice, bodyMask
+    # {slice});
 
-            # Sleep for 1 second to allow user to view the image
-            # pyplot.pause(1)
+    # Sleep for 1 second to allow user to view the image
+    # pyplot.pause(1)

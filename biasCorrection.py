@@ -21,18 +21,24 @@ def correctBias(image, shrinkFactor, prefix):
         sitk.WriteImage(image, os.path.join(constants.pathDir, 'debug', prefix, 'image.img'))
 
     # Shrink image by shrinkFactor to make the bias correction quicker
-    shrinkedImage = sitk.Shrink(image, [shrinkFactor] * image.GetDimension())
+    # Use resample to linearly interpolate between pixel values
+    # TODO Issue using numpy.array() parameter for size but not the spacing or origin
+    shrinkedImage = sitk.Resample(image, [round(x / shrinkFactor) for x in image.GetSize()], sitk.Transform(),
+                                  sitk.sitkLinear, image.GetOrigin(), [x * shrinkFactor for x in image.GetSpacing()],
+                                  image.GetDirection())
 
     if constants.debugBiasCorrection:
         sitk.WriteImage(shrinkedImage, os.path.join(constants.pathDir, 'debug', prefix, 'imageShrinked.img'))
 
-    # TODO Try this with a regular threshold
     # Perform Otsu's thresholding method on images to get a mask for N4 correction bias
+    # According to Sled's paper (author of N3 bias correction), the mask is to remove infinity values
+    # from log-space (log(0) = infinity)
     imageMask = sitk.OtsuThreshold(shrinkedImage, 0, 1, 200)
 
     if constants.debugBiasCorrection:
         sitk.WriteImage(imageMask, os.path.join(constants.pathDir, 'debug', prefix, 'imageMask.img'))
 
+    # Apply N4 bias field correction to the shrinked image
     correctedImage = sitk.N4BiasFieldCorrection(shrinkedImage, imageMask)
 
     if constants.debugBiasCorrection:
@@ -52,11 +58,16 @@ def correctBias(image, shrinkFactor, prefix):
     if constants.debugBiasCorrection:
         sitk.WriteImage(biasFieldShrinked, os.path.join(constants.pathDir, 'debug', prefix, 'biasFieldShrinked.img'))
 
+    # TODO This causes the first and last slice of the biasField to be all 0s
     # Since the image was shrinked when performing bias correction to speed up the process, the bias field is
     # now expanded to the original image size
+    newSpacing = np.array(biasFieldShrinked.GetSize()) / np.array(image.GetSize()) * \
+                 np.array(biasFieldShrinked.GetSpacing())
+    print(newSpacing)
     biasField = sitk.Resample(biasFieldShrinked, image.GetSize(), sitk.Transform(), sitk.sitkLinear,
-                              image.GetOrigin(), np.array(biasFieldShrinked.GetSpacing()) / shrinkFactor,
+                              image.GetOrigin(), newSpacing,  # np.array(biasFieldShrinked.GetSpacing()) / shrinkFactor,
                               image.GetDirection())
+    biasField.SetSpacing(image.GetSpacing())
 
     # Replace all 0s in shrinked image with 1s
     # Prevents infinity values when calculating corrected image, by setting the bias field to 1 at

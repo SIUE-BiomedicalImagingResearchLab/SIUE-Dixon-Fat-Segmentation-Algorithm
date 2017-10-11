@@ -12,8 +12,11 @@ forceSegmentation = False
 # Debug option to show the body mask side by side with the fat/water slice combined
 showBodyMask = False
 
+# Debug option to save intermediate steps while running algorithm
+debug = True
+
 # Debug option to save intermediate steps for N4 bias correction in directory of the subject
-debugBiasCorrection = True
+debugBiasCorrection = False
 
 # Factor to shrink the volume by when applying the N4 ITK bias correction algorithm
 # Should be a number between 1-4
@@ -22,3 +25,6 @@ debugBiasCorrection = True
 # 2 - fatUpper took 80s, so total would be approx. 12 * 4 = 320s ~= 5min
 # 1 - fatUpper took 690s, so total would be approx. 12 * 4 = 2760s ~= 46min
 shrinkFactor = 4
+
+# Number of clusters for the K-means algorithm for segmenting images
+kMeanClusters = 2
