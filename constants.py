@@ -12,6 +12,9 @@ forceSegmentation = False
 # Debug option to show the body mask side by side with the fat/water slice combined
 showBodyMask = False
 
+# Debug option to save intermediate steps for N4 bias correction in directory of the subject
+debugBiasCorrection = True
+
 # Factor to shrink the volume by when applying the N4 ITK bias correction algorithm
 # Should be a number between 1-4
 # 4 - fatUpper took 12s, so total would be approx. 12 * 4 = 48s

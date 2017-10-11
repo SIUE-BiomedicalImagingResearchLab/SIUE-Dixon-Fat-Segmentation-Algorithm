@@ -1,13 +1,13 @@
 import os.path
+from pathlib import Path
 
-import nibabel
-from PyQt5.QtCore import pyqtSlot
+import SimpleITK as sitk
+from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from pathlib import Path
 from lxml import etree
 
+import constants
 import mainWindow_ui
 from runSegmentation import runSegmentation
 
@@ -94,13 +94,16 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
             # TODO Check for forceSegmentation
 
             # Load unrectified NIFTI files for the current dataPath
-            niiFatUpper = nibabel.load(NIFTIFatUpperFilename)
-            niiFatLower = nibabel.load(NIFTIFatLowerFilename)
-            niiWaterUpper = nibabel.load(NIFTIWaterUpperFilename)
-            niiWaterLower = nibabel.load(NIFTIWaterLowerFilename)
+            niiFatUpper = sitk.ReadImage(NIFTIFatUpperFilename)
+            niiFatLower = sitk.ReadImage(NIFTIFatLowerFilename)
+            niiWaterUpper = sitk.ReadImage(NIFTIWaterUpperFilename)
+            niiWaterLower = sitk.ReadImage(NIFTIWaterLowerFilename)
 
             # Load config XML file
             config = etree.parse(configFilename)
+
+            # Set constant pathDir to be the current data path to allow writing/reading from the current directory
+            constants.pathDir = dataPath
 
             # Run segmentation algorithm
             runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config)
