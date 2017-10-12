@@ -54,32 +54,67 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
-                           prefix='fatImageBiasCorrection')
-    waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor,
-                             prefix='waterImageBiasCorrection')
+    if os.path.exists(os.path.join(constants.pathDir, 'debug', 'fatImage.img')) and \
+            os.path.exists(os.path.join(constants.pathDir, 'debug', 'waterImage.img')):
+        fatImage = sitk.ReadImage(os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
+        waterImage = sitk.ReadImage(os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
+    else:
+        fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
+                               prefix='fatImageBiasCorrection')
+        waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor,
+                                 prefix='waterImageBiasCorrection')
     toc = time.perf_counter()
     print('N4ITK bias field correction took %f seconds' % (toc - tic))
 
+    # Print out the fat and water image after bias correction
     if constants.debug:
         sitk.WriteImage(fatImage, os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
         sitk.WriteImage(waterImage, os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
 
+    # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
+    # These are used to print the entire 3D volume out for debugging afterwards
+    blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
+    blankImage.CopyInformation(fatImage[:, :, 0])
+    fatImageMasks = [blankImage] * fatImage.GetDepth()
+    waterImageMasks = [blankImage] * fatImage.GetDepth()
+    totalImageMasks = [blankImage] * fatImage.GetDepth()
 
-    # TODO Try doing this on a slice-by-slice basis! Could be faster
+    for slice in range(0, fatImage.GetDepth() // 3):
+        tic = time.perf_counter()
 
-    # Segment fat/water images using K-means
-    tic = time.perf_counter()
-    fatImageMask = sitk.ScalarImageKmeans(fatImage, [0.0] * constants.kMeanClusters)
-    waterImageMask = sitk.ScalarImageKmeans(waterImage, [0.0] * constants.kMeanClusters)
-    toc = time.perf_counter()
-    print('K means clustering (clusters = %i) took %f seconds' % (constants.kMeanClusters, toc - tic))
+        fatImageSlice = fatImage[:, :, slice]
+        waterImageSlice = waterImage[:, :, slice]
+
+        # Segment fat/water images using K-means
+        # The value 1 indicates background object so invert it by setting all 0 values to 1
+        fatImageMask = sitk.ScalarImageKmeans(fatImageSlice, [0.0] * constants.kMeanClusters) == 0
+        waterImageMask = sitk.ScalarImageKmeans(waterImageSlice, [0.0] * constants.kMeanClusters) == 0
+        fatImageMasks[slice] = fatImageMask
+        waterImageMasks[slice] = waterImageMask
+
+        totalImageMask = fatImageMask | waterImageMask
+        totalImageMasks[slice] = totalImageMask
+
+        toc = time.perf_counter()
+        print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
     if constants.debug:
-        sitk.WriteImage(fatImageMask, os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
-        sitk.WriteImage(waterImageMask, os.path.join(constants.pathDir, 'debug', 'waterImageMask.img'))
+        sitk.WriteImage(sitk.JoinSeries(fatImageMasks), os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
+        sitk.WriteImage(sitk.JoinSeries(waterImageMasks), os.path.join(constants.pathDir, 'debug',
+                                                                       'waterImageMask.img'))
+        sitk.WriteImage(sitk.JoinSeries(totalImageMasks), os.path.join(constants.pathDir, 'debug',
+                                                                       'totalImageMask.img'))
 
-    i = 4
+    # Segment fat/water images using K-means
+    # tic = time.perf_counter()
+    # fatImageMask = sitk.ScalarImageKmeans(fatImage, [0.0] * constants.kMeanClusters)
+    # waterImageMask = sitk.ScalarImageKmeans(waterImage, [0.0] * constants.kMeanClusters)
+    # toc = time.perf_counter()
+    # print('K means clustering (clusters = %i) took %f seconds' % (constants.kMeanClusters, toc - tic))
+
+    # if constants.debug:
+    #     sitk.WriteImage(fatImageMask, os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
+    #     sitk.WriteImage(waterImageMask, os.path.join(constants.pathDir, 'debug', 'waterImageMask.img'))
 
     # Loop through each axial slice of the image.
     # This is easier than performing operations on the entire image since many
