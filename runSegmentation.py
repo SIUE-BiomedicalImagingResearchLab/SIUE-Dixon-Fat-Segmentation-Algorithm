@@ -2,12 +2,13 @@ import os
 import time
 
 import SimpleITK as sitk
-import cv2
 import matplotlib.pyplot as plt
-import numpy as np
+import skimage.morphology
+import scipy.ndimage.morphology
 
 import constants
 from biasCorrection import correctBias
+from utils import *
 
 
 # Get resulting path for debug files
@@ -55,7 +56,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    if os.path.exists(getDebugPath('fatImage.img')) and os.path.exists(getDebugPath('waterImage.img')):
+    if os.path.exists(getDebugPath('fatImage.npy')) and os.path.exists(getDebugPath('waterImage.npy')):
         fatImage = np.load(getDebugPath('fatImage.npy'))
         waterImage = np.load(getDebugPath('waterImage.npy'))
     else:
@@ -73,21 +74,23 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
-    blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
-    blankImage.CopyInformation(fatImage[:, :, 0])
-    fatImageMasks = [blankImage] * fatImage.GetDepth()
-    waterImageMasks = [blankImage] * fatImage.GetDepth()
-    bodyMasks = [blankImage] * fatImage.GetDepth()
-    VATMasks = [blankImage] * fatImage.GetDepth()
-
-    filledImages = [blankImage] * fatImage.GetDepth()
+    fatImageMasks = np.zeros(fatImage.shape, np.uint8)
+    waterImageMasks = np.zeros(fatImage.shape, np.uint8)
+    # blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
+    # blankImage.CopyInformation(fatImage[:, :, 0])
+    # fatImageMasks = [blankImage] * fatImage.GetDepth()
+    # waterImageMasks = [blankImage] * fatImage.GetDepth()
+    # bodyMasks = [blankImage] * fatImage.GetDepth()
+    # VATMasks = [blankImage] * fatImage.GetDepth()
+    #
+    # filledImages = [blankImage] * fatImage.GetDepth()
 
     # gradientMagImages = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
     # sigGradientMagImages = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
     # initialContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
     # finalContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
 
-    for slice in range(0, fatImage.GetDepth() // 3):
+    for slice in range(0, fatImage.shape[2] // 3):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -95,10 +98,14 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
         # Segment fat/water images using K-means
         # The value 1 indicates background object so invert it by setting all 0 values to 1
-        fatImageMask = sitk.ScalarImageKmeans(fatImageSlice, [0.0] * constants.kMeanClusters) == 0
-        waterImageMask = sitk.ScalarImageKmeans(waterImageSlice, [0.0] * constants.kMeanClusters) == 0
-        fatImageMasks[slice] = fatImageMask
-        waterImageMasks[slice] = waterImageMask
+        fatImageMask = (kmeans(fatImageSlice, constants.kMeanClusters) == 1)
+        waterImageMask = (kmeans(waterImageSlice, constants.kMeanClusters) == 1)
+        fatImageMasks[:, :, slice] = fatImageMask
+        waterImageMasks[:, :, slice] = waterImageMask
+
+        bodyMask = np.logical_or(fatImageMask, waterImageMask)
+        bodyMask = skimage.morphology.binary_closing(bodyMask, skimage.morphology.disk(3))
+        bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
 
         # Consider after N4 Bias correction switching to NumPy and ski image for algorithms...
 
@@ -106,9 +113,9 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         # Apply some closing to the image mask to connect any small gaps (such as at umbilical cord)
         # Fill all holes which will create a solid body mask
         # Remove small objects that are artifacts from segmentation
-        bodyMask = fatImageMask | waterImageMask
-        bodyMask = sitk.BinaryMorphologicalClosing(bodyMask, 3, sitk.sitkBall)
-        bodyMask = sitk.BinaryFillhole(bodyMask)
+        # bodyMask = fatImageMask | waterImageMask
+        # bodyMask = sitk.BinaryMorphologicalClosing(bodyMask, 3, sitk.sitkBall)
+        # bodyMask = sitk.BinaryFillhole(bodyMask)
 
         # TODO Determine why BinaryMinMaxCurvativeFlow requires real types for a binary image?
         bodyMasks[slice] = bodyMask
