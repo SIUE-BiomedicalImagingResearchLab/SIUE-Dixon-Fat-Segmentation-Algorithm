@@ -1,7 +1,7 @@
 import os.path
 from pathlib import Path
 
-import SimpleITK as sitk
+import nibabel as nib
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -57,22 +57,26 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         settings.setValue('defaultOpenPath', defaultOpenPath)
 
         # Check to make sure the directories are valid
+        # Note: Don't use dir as variable name because it shadows built-in variable
         error = False
-        for dir in dirs:
-            if os.path.isdir(dir):
-                self.sourceModel.appendRow(QStandardItem(dir))
+        for dir_ in dirs:
+            if os.path.isdir(dir_):
+                self.sourceModel.appendRow(QStandardItem(dir_))
             else:
                 error = True
 
         # If an error occurred, tell the user that the directory was not added
         if error:
-            QMessageBox.critical(self, "Invalid directory", "One of the directories you chose was invalid. It was not added to the list")
+            QMessageBox.critical(self, "Invalid directory",
+                                 "One of the directories you chose was invalid. It was not added to the list")
 
     @pyqtSlot()
     def on_runButton_clicked(self):
         # If there are no source files, then return
         if self.sourceModel.rowCount() is 0:
-            QMessageBox.warning(self, "No source directories", "There are no source directories in the list currently. Please add some folders before converting.")
+            QMessageBox.warning(self, "No source directories",
+                                "There are no source directories in the list currently. Please add some folders "
+                                "before converting.")
             return
 
         for i in range(self.sourceModel.rowCount()):
@@ -81,23 +85,25 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
             print('Beginning segmentation for ' + dataPath)
 
             # Get the filenames for the rectified NIFTI files for current dataPath
-            NIFTIFatUpperFilename = os.path.join(dataPath, 'fatUpper.nii');
-            NIFTIFatLowerFilename = os.path.join(dataPath, 'fatLower.nii');
-            NIFTIWaterUpperFilename = os.path.join(dataPath, 'waterUpper.nii');
-            NIFTIWaterLowerFilename = os.path.join(dataPath, 'waterLower.nii');
-            configFilename = os.path.join(dataPath, 'config.xml');
+            niiFatUpperFilename = os.path.join(dataPath, 'fatUpper.nii')
+            niiFatLowerFilename = os.path.join(dataPath, 'fatLower.nii')
+            niiWaterUpperFilename = os.path.join(dataPath, 'waterUpper.nii')
+            niiWaterLowerFilename = os.path.join(dataPath, 'waterLower.nii')
+            configFilename = os.path.join(dataPath, 'config.xml')
 
-            if not (os.path.isfile(NIFTIFatUpperFilename) and os.path.isfile(NIFTIFatLowerFilename) and os.path.isfile(NIFTIWaterUpperFilename) and os.path.isfile(NIFTIWaterLowerFilename) and os.path.isfile(configFilename)):
+            if not (os.path.isfile(niiFatUpperFilename) and os.path.isfile(niiFatLowerFilename) and os.path.isfile(
+                    niiWaterUpperFilename) and os.path.isfile(niiWaterLowerFilename) and os.path.isfile(
+                    configFilename)):
                 print('Missing required files from source path folder. Continuing...')
                 continue
 
             # TODO Check for forceSegmentation
 
             # Load unrectified NIFTI files for the current dataPath
-            niiFatUpper = sitk.ReadImage(NIFTIFatUpperFilename)
-            niiFatLower = sitk.ReadImage(NIFTIFatLowerFilename)
-            niiWaterUpper = sitk.ReadImage(NIFTIWaterUpperFilename)
-            niiWaterLower = sitk.ReadImage(NIFTIWaterLowerFilename)
+            niiFatUpper = nib.load(niiFatUpperFilename)
+            niiFatLower = nib.load(niiFatLowerFilename)
+            niiWaterUpper = nib.load(niiWaterUpperFilename)
+            niiWaterLower = nib.load(niiWaterLowerFilename)
 
             # Load config XML file
             config = etree.parse(configFilename)

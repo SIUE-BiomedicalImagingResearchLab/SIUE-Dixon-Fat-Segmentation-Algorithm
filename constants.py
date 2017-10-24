@@ -16,7 +16,7 @@ showBodyMask = False
 debug = True
 
 # Debug option to save intermediate steps for N4 bias correction in directory of the subject
-debugBiasCorrection = False
+debugBiasCorrection = True
 
 # Factor to shrink the volume by when applying the N4 ITK bias correction algorithm
 # Should be a number between 1-4

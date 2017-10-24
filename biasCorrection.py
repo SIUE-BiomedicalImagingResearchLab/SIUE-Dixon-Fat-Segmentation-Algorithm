@@ -2,8 +2,16 @@ import os
 
 import SimpleITK as sitk
 import numpy as np
+import scipy.ndimage.interpolation
+import skimage.filters
+import skimage.transform
 
 import constants
+
+
+# Get resulting path for debug files
+def getDebugPath(prefix, filename):
+    return os.path.join(constants.pathDir, 'debug', prefix, filename)
 
 
 # Given an image and a shrink factor, the image is corrected via N4 bias correction method
@@ -13,77 +21,67 @@ def correctBias(image, shrinkFactor, prefix):
     # to continue in that case
     if constants.debugBiasCorrection:
         try:
-            os.makedirs(os.path.join(constants.pathDir, 'debug', prefix))
-        except:
+            os.makedirs(getDebugPath(prefix, ''))
+        except os.error:
             pass
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(image, os.path.join(constants.pathDir, 'debug', prefix, 'image.img'))
+        np.save(getDebugPath(prefix, 'image.npy'), image)
 
     # Shrink image by shrinkFactor to make the bias correction quicker
     # Use resample to linearly interpolate between pixel values
-    # TODO Issue using numpy.array() parameter for size but not the spacing or origin
-    shrinkedImage = sitk.Resample(image, [round(x / shrinkFactor) for x in image.GetSize()], sitk.Transform(),
-                                  sitk.sitkLinear, image.GetOrigin(), [x * shrinkFactor for x in image.GetSpacing()],
-                                  image.GetDirection())
+    shrinkedImage = scipy.ndimage.interpolation.zoom(image, 1 / shrinkFactor)
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(shrinkedImage, os.path.join(constants.pathDir, 'debug', prefix, 'imageShrinked.img'))
+        np.save(getDebugPath(prefix, 'imageShrinked.npy'), shrinkedImage)
 
     # Perform Otsu's thresholding method on images to get a mask for N4 correction bias
     # According to Sled's paper (author of N3 bias correction), the mask is to remove infinity values
     # from log-space (log(0) = infinity)
-    imageMask = sitk.OtsuThreshold(shrinkedImage, 0, 1, 200)
+    imageMaskThresh = skimage.filters.threshold_otsu(shrinkedImage)
+    imageMask = (shrinkedImage >= imageMaskThresh).astype(np.uint8)
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(imageMask, os.path.join(constants.pathDir, 'debug', prefix, 'imageMask.img'))
+        np.save(getDebugPath(prefix, 'imageMask.npy'), imageMask)
 
     # Apply N4 bias field correction to the shrinked image
-    correctedImage = sitk.N4BiasFieldCorrection(shrinkedImage, imageMask)
+    shrinkedImageITK = sitk.GetImageFromArray(shrinkedImage)
+    imageMaskITK = sitk.GetImageFromArray(imageMask)
+    correctedImageITK = sitk.N4BiasFieldCorrection(shrinkedImageITK, imageMaskITK)
+    correctedImage = sitk.GetArrayFromImage(correctedImageITK)
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(correctedImage, os.path.join(constants.pathDir, 'debug', prefix, 'correctedImageShrinked.img'))
+        np.save(getDebugPath(prefix, 'correctedImageShrinked.npy'), correctedImage)
 
     # Replace all 0s in shrinked image with very small number
     # Prevents infinity values when calculating shrinked bias field, prevents divide by zero issues
-    zeroShrinkedImageMask = sitk.Cast(shrinkedImage == 0.0, shrinkedImage.GetPixelIDValue())
-    notZeroShrinkedImageMask = sitk.InvertIntensity(zeroShrinkedImageMask, 1.0)
-    shrinkedImage = (shrinkedImage * notZeroShrinkedImageMask) + (0.001 * zeroShrinkedImageMask)
+    correctedImage[correctedImage == 0] = 0.001
 
     # Get the bias field by dividing measured image by corrected image
     # v(x) / u(x) = f(x)
-    # TODO Division causes __truediv__ which uses DivideReal. Only returns double type, not float
-    biasFieldShrinked = sitk.Cast(shrinkedImage / correctedImage, sitk.sitkFloat32)
+    biasFieldShrinked = shrinkedImage / correctedImage
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(biasFieldShrinked, os.path.join(constants.pathDir, 'debug', prefix, 'biasFieldShrinked.img'))
+        np.save(getDebugPath(prefix, 'biasFieldShrinked.npy'), biasFieldShrinked)
 
     # TODO This causes the first and last slice of the biasField to be all 0s
     # Since the image was shrinked when performing bias correction to speed up the process, the bias field is
     # now expanded to the original image size
-    newSpacing = np.array(biasFieldShrinked.GetSize()) / np.array(image.GetSize()) * \
-                 np.array(biasFieldShrinked.GetSpacing())
-    print(newSpacing)
-    biasField = sitk.Resample(biasFieldShrinked, image.GetSize(), sitk.Transform(), sitk.sitkLinear,
-                              image.GetOrigin(), newSpacing,  # np.array(biasFieldShrinked.GetSpacing()) / shrinkFactor,
-                              image.GetDirection())
-    biasField.SetSpacing(image.GetSpacing())
+    biasField = scipy.ndimage.interpolation.zoom(biasFieldShrinked, np.array(image.shape) / biasFieldShrinked.shape)
 
     # Replace all 0s in shrinked image with 1s
     # Prevents infinity values when calculating corrected image, by setting the bias field to 1 at
     # that index, it will set the corrected image pixel equal to the original image pixel value
-    zeroBiasFieldMask = sitk.Cast(biasField == 0.0, biasField.GetPixelIDValue())
-    notZeroBiasFieldMask = sitk.InvertIntensity(zeroBiasFieldMask, 1.0)
-    biasField = (biasField * notZeroBiasFieldMask) + (1.0 * zeroBiasFieldMask)
+    biasField[biasField == 0] = 1
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(biasField, os.path.join(constants.pathDir, 'debug', prefix, 'biasField.img'))
+        np.save(getDebugPath(prefix, 'biasField.npy'), biasField)
 
     # Get the actual image by dividing original image by the bias field
     # u(x) = v(x) / f(x)
     correctedImage = image / biasField
 
     if constants.debugBiasCorrection:
-        sitk.WriteImage(correctedImage, os.path.join(constants.pathDir, 'debug', prefix, 'correctedImage.img'))
+        np.save(getDebugPath(prefix, 'correctedImage.npy'), biasField)
 
     return correctedImage

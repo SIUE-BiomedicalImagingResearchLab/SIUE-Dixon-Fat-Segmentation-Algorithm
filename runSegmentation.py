@@ -1,10 +1,18 @@
+import os
 import time
 
-import SimpleITKutils as sitku
-from biasCorrection import *
+import SimpleITK as sitk
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
+import constants
+from biasCorrection import correctBias
+
+
+# Get resulting path for debug files
+def getDebugPath(str):
+    return os.path.join(constants.pathDir, 'debug', str)
 
 
 # Segment depots of adipose tissue given Dixon MRI images
@@ -14,7 +22,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     # to continue in that case
     if constants.debug:
         try:
-            os.makedirs(os.path.join(constants.pathDir, 'debug'))
+            os.makedirs(getDebugPath(''))
         except:
             pass
 
@@ -31,36 +39,25 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     imageLowerSuperiorSlice = int(imageLowerTag.attrib['superiorSlice'])
 
     # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
-    fatUpperImage = niiFatUpper[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    fatLowerImage = niiFatLower[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
-    waterUpperImage = niiWaterUpper[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    waterLowerImage = niiWaterLower[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
-
-    # # TODO Do all of this numpy operations with ITK so I can just be consistent
-    # Cast the four images to 32-bit floats
-    fatUpperImage = sitk.Cast(fatUpperImage, sitk.sitkFloat32)
-    fatLowerImage = sitk.Cast(fatLowerImage, sitk.sitkFloat32)
-    waterUpperImage = sitk.Cast(waterUpperImage, sitk.sitkFloat32)
-    waterLowerImage = sitk.Cast(waterLowerImage, sitk.sitkFloat32)
+    fatUpperImage = niiFatUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
+    fatLowerImage = niiFatLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
+    waterUpperImage = niiWaterUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
+    waterLowerImage = niiWaterLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
 
     # Concatenate the lower and upper image into one along the Z dimension
     # TODO Consider removing this and performing segmentation on upper/lower pieces separately
-    fatImage = sitku.concatenate((fatLowerImage, fatUpperImage), 2)
-    waterImage = sitku.concatenate((waterLowerImage, waterUpperImage), 2)
+    fatImage = np.concatenate((fatLowerImage, fatUpperImage), axis=2)
+    waterImage = np.concatenate((waterLowerImage, waterUpperImage), axis=2)
 
-    # TODO Create procedural function for MinimumMaximumImageFilter in SimpleITK
-    # TODO Add option to specify parameters like Function(image, param=Value) to SimpleITK
-    # Todo create procedural function for StatisticsImageFilter in SimpleITK
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0)
-    fatImage = sitk.RescaleIntensity(fatImage, 0.0, 1.0)
-    waterImage = sitk.RescaleIntensity(waterImage, 0.0, 1.0)
+    fatImage = (fatImage - fatImage.min()) / (fatImage.max() - fatImage.min())
+    waterImage = (waterImage - waterImage.min()) / (waterImage.max() - waterImage.min())
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    if os.path.exists(os.path.join(constants.pathDir, 'debug', 'fatImage.img')) and \
-            os.path.exists(os.path.join(constants.pathDir, 'debug', 'waterImage.img')):
-        fatImage = sitk.ReadImage(os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
-        waterImage = sitk.ReadImage(os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
+    if os.path.exists(getDebugPath('fatImage.img')) and os.path.exists(getDebugPath('waterImage.img')):
+        fatImage = np.load(getDebugPath('fatImage.npy'))
+        waterImage = np.load(getDebugPath('waterImage.npy'))
     else:
         fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
                                prefix='fatImageBiasCorrection')
@@ -71,8 +68,8 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Print out the fat and water image after bias correction
     if constants.debug:
-        sitk.WriteImage(fatImage, os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
-        sitk.WriteImage(waterImage, os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
+        np.save(getDebugPath('fatImage.npy'), fatImage)
+        np.save(getDebugPath('waterImage.npy'), waterImage)
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
@@ -194,7 +191,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         sitk.WriteImage(sitk.JoinSeries(bodyMasks), os.path.join(constants.pathDir, 'debug',
                                                                  'bodyMask.img'))
         sitk.WriteImage(sitk.JoinSeries(VATMasks), os.path.join(constants.pathDir, 'debug',
-                                                                 'VATMask.img'))
+                                                                'VATMask.img'))
 
         # sitk.WriteImage(sitk.JoinSeries(filledImages), os.path.join(constants.pathDir, 'debug',
         #                                                          'filledImage.img'))
