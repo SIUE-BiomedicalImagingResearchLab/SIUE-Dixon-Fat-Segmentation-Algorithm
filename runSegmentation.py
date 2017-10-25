@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import skimage.morphology
 import scipy.ndimage.morphology
 import skimage.segmentation
+import skimage.draw
 
 import constants
 from biasCorrection import correctBias
@@ -130,23 +131,36 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
         fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
         fatVoidMask = np.logical_not(fatVoidMask)
-        fatVoidMask = skimage.morphology.binary_closing(fatVoidMask, skimage.morphology.disk(3))
+        fatVoidMask = skimage.morphology.binary_closing(fatVoidMask, skimage.morphology.disk(6))
         fatVoidMask = skimage.morphology.binary_opening(fatVoidMask, skimage.morphology.disk(3))
         fatVoidMasks[:, :, slice] = fatVoidMask
 
         # TODO Seriously, it may be better to have 0->255 for the min/max intension. 0->1 isn't the greatest
 
-        # Convex hull does not give horrible results but I don't think it is exactly what I want
-        # image, contours, hierarchy = cv2.findContours(fatVoidMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # combinedContours = np.vstack(contours)
-        # hullContour = cv2.convexHull(combinedContours)
+        # Use active contours to get the abdominal mask
+        # Originally, I attempted this using the convex hull but I was not a huge fan of the results
+        # since there were instances where the outline was concave and not convex
+        # For active contours, we need an initial contour. We will start with an outline of the body mask
+        # Find contours of body mask
+        image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        # abdominalMask = np.zeros(fatVoidMask.shape, np.uint8)
-        # abdominalMask = cv2.drawContours(abdominalMask, [hullContour], 0, 1, -1).astype(bool)
-        # abdominalMasks[:, :, slice] = abdominalMask
+        # Sort the contours by area and select the one with largest area, this will be the body mask contour
+        sortedContourArea = np.array([cv2.contourArea(contour) for contour in contours])
+        index = np.argmax(sortedContourArea)
+        initialContour = contours[index]
+        initialContour = initialContour.reshape(initialContour.shape[::2])
 
-        # plt.imshow(VATMask)
-        # plt.show()
+        # Perform active contour snake algorithm to get outline of the abdominal mask
+        snakeContour = skimage.segmentation.active_contour(fatVoidMask.astype(np.uint8) * 255, initialContour, alpha=0.70, beta=0.01, gamma=0.1, max_iterations=2500, max_px_move=1.0, w_line=0.0, w_edge=5.0, convergence=0.1)
+
+        # Draw snake contour on abdominalMask variable
+        # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
+        # Perimeter is good for testing while polygon is the general use one
+        abdominalMask = np.zeros(fatVoidMask.shape, np.uint8)
+        rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
+        # rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
+        abdominalMask[cc, rr] = 1
+        abdominalMasks[:, :, slice] = abdominalMask.astype(bool)
 
         # # Select contours 9->13, these can be seen in the figure below
         # # Draw the contours onto contourImage to show what contours were found
