@@ -1,10 +1,12 @@
 import os
 import time
+import sys
 
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import skimage.morphology
 import scipy.ndimage.morphology
+import skimage.segmentation
 
 import constants
 from biasCorrection import correctBias
@@ -15,6 +17,10 @@ from utils import *
 def getDebugPath(str):
     return os.path.join(constants.pathDir, 'debug', str)
 
+sliceNumber = 0
+showDiff = True
+image1 = None
+image2 = None
 
 # Segment depots of adipose tissue given Dixon MRI images
 def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
@@ -74,8 +80,11 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
-    fatImageMasks = np.zeros(fatImage.shape, np.uint8)
-    waterImageMasks = np.zeros(fatImage.shape, np.uint8)
+    fatImageMasks = np.zeros(fatImage.shape, bool)
+    waterImageMasks = np.zeros(fatImage.shape, bool)
+    bodyMasks = np.zeros(fatImage.shape, bool)
+    fatVoidMasks = np.zeros(fatImage.shape, bool)
+    abdominalMasks = np.zeros(fatImage.shape, bool)
     # blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
     # blankImage.CopyInformation(fatImage[:, :, 0])
     # fatImageMasks = [blankImage] * fatImage.GetDepth()
@@ -90,63 +99,54 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     # initialContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
     # finalContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
 
-    for slice in range(0, fatImage.shape[2] // 3):
+    for slice in range(0, fatImage.shape[2] // 20):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
         waterImageSlice = waterImage[:, :, slice]
 
         # Segment fat/water images using K-means
-        # The value 1 indicates background object so invert it by setting all 0 values to 1
-        fatImageMask = (kmeans(fatImageSlice, constants.kMeanClusters) == 1)
-        waterImageMask = (kmeans(waterImageSlice, constants.kMeanClusters) == 1)
+        # labelOrder contains the labels sorted from smallest intensity to greatest
+        # Since our k = 2, we want the higher intensity label at index 1
+        labelOrder, centroids, fatImageLabels = kmeans(fatImageSlice, constants.kMeanClusters)
+        fatImageMask = (fatImageLabels == labelOrder[1])
+        labelOrder, centroids, waterImageLabels = kmeans(waterImageSlice, constants.kMeanClusters)
+        waterImageMask = (waterImageLabels == labelOrder[1])
         fatImageMasks[:, :, slice] = fatImageMask
         waterImageMasks[:, :, slice] = waterImageMask
-
-        bodyMask = np.logical_or(fatImageMask, waterImageMask)
-        bodyMask = skimage.morphology.binary_closing(bodyMask, skimage.morphology.disk(3))
-        bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
-
-        # Consider after N4 Bias correction switching to NumPy and ski image for algorithms...
 
         # Get body mask by combining fat and water masks
         # Apply some closing to the image mask to connect any small gaps (such as at umbilical cord)
         # Fill all holes which will create a solid body mask
         # Remove small objects that are artifacts from segmentation
-        # bodyMask = fatImageMask | waterImageMask
-        # bodyMask = sitk.BinaryMorphologicalClosing(bodyMask, 3, sitk.sitkBall)
-        # bodyMask = sitk.BinaryFillhole(bodyMask)
+        bodyMask = np.logical_or(fatImageMask, waterImageMask)
+        bodyMask = skimage.morphology.binary_closing(bodyMask, skimage.morphology.disk(3))
+        bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
+        bodyMasks[:, :, slice] = bodyMask
 
-        # TODO Determine why BinaryMinMaxCurvativeFlow requires real types for a binary image?
-        bodyMasks[slice] = bodyMask
+        # Fill holes in the fat image mask and invert it to get the background of fat image
+        # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
+        # Next, remove small objects by morphologically opening
+        fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
+        fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
+        fatVoidMask = np.logical_not(fatVoidMask)
+        fatVoidMask = skimage.morphology.binary_closing(fatVoidMask, skimage.morphology.disk(3))
+        fatVoidMask = skimage.morphology.binary_opening(fatVoidMask, skimage.morphology.disk(3))
+        fatVoidMasks[:, :, slice] = fatVoidMask
 
         # TODO Seriously, it may be better to have 0->255 for the min/max intension. 0->1 isn't the greatest
 
-        # More testing here
-        # Fill holes in the fat image mask and invert it to get the background
-        # Fill in the background for fatImageMask and then invert intensity to make
-        # the holes inside of the object become the new object
-        # Remove small objects from holesImage by morphological opening
-        # Connect all objects from the resulting image by morphological closing
-        # Finally, fill holes in image to get the VAT mask
-        backgroundImage = sitk.InvertIntensity(sitk.BinaryFillhole(fatImageMask), 1)
-        holesImage = sitk.InvertIntensity(backgroundImage | fatImageMask, 1)
-        holesImage2 = sitk.BinaryMorphologicalOpening(holesImage, 3, sitk.sitkBall)
-        holesImage3 = sitk.RescaleIntensity(holesImage2, 0, 255)
+        # Convex hull does not give horrible results but I don't think it is exactly what I want
+        # image, contours, hierarchy = cv2.findContours(fatVoidMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # combinedContours = np.vstack(contours)
+        # hullContour = cv2.convexHull(combinedContours)
 
-        # holesImage3 = sitk.BinaryMorphologicalClosing(holesImage2, 15, sitk.sitkBall)
-        # VATMask = sitk.BinaryFillhole(holesImage2)
+        # abdominalMask = np.zeros(fatVoidMask.shape, np.uint8)
+        # abdominalMask = cv2.drawContours(abdominalMask, [hullContour], 0, 1, -1).astype(bool)
+        # abdominalMasks[:, :, slice] = abdominalMask
 
-        numpyAr = sitk.GetArrayViewFromImage(holesImage3)
-        image, contours, hierarchy = cv2.findContours(numpyAr, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        combinedContours = np.vstack(contours)
-        hullContour = cv2.convexHull(combinedContours)
-
-        VATMask = np.zeros(numpyAr.shape, np.uint8)
-        VATMask = cv2.drawContours(VATMask, [hullContour], 0, 255, -1)
-
-        plt.imshow(VATMask)
-        plt.show()
+        # plt.imshow(VATMask)
+        # plt.show()
 
         # # Select contours 9->13, these can be seen in the figure below
         # # Draw the contours onto contourImage to show what contours were found
@@ -166,7 +166,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         # img = np.zeros(numpyAr.shape, dtype=np.uint8)
         # VATMask = cv2.fillConvexPoly(img, hull, 255)
 
-        VATMasks[slice] = holesImage3
+        # VATMasks[slice] = holesImage3
         # filledImages[slice] = filledImage
 
         # # Testing with Geodesic Active Contour
@@ -191,14 +191,76 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
-    if constants.debug:
-        sitk.WriteImage(sitk.JoinSeries(fatImageMasks), os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
-        sitk.WriteImage(sitk.JoinSeries(waterImageMasks), os.path.join(constants.pathDir, 'debug',
-                                                                       'waterImageMask.img'))
-        sitk.WriteImage(sitk.JoinSeries(bodyMasks), os.path.join(constants.pathDir, 'debug',
-                                                                 'bodyMask.img'))
-        sitk.WriteImage(sitk.JoinSeries(VATMasks), os.path.join(constants.pathDir, 'debug',
-                                                                'VATMask.img'))
+    # if constants.debug:
+    #     sitk.WriteImage(sitk.JoinSeries(fatImageMasks), os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
+    #     sitk.WriteImage(sitk.JoinSeries(waterImageMasks), os.path.join(constants.pathDir, 'debug',
+    #                                                                    'waterImageMask.img'))
+    #     sitk.WriteImage(sitk.JoinSeries(bodyMasks), os.path.join(constants.pathDir, 'debug',
+    #                                                              'bodyMask.img'))
+    #     sitk.WriteImage(sitk.JoinSeries(VATMasks), os.path.join(constants.pathDir, 'debug',
+    #                                                             'VATMask.img'))
+
+    # Figure stuff
+    def press(event):
+        global image1
+        global image2
+        global sliceNumber
+        global showDiff
+
+        print('Press: ', event.key)
+        sys.stdout.flush()
+
+        if event.key == '1':
+            image1 = fatImage
+            image2 = fatImageMasks
+        elif event.key == '2':
+            image1 = waterImage
+            image2 = waterImageMasks
+        elif event.key == '3':
+            image1 = fatImage
+            image2 = bodyMasks
+        elif event.key == '4':
+            image1 = fatImage
+            image2 = fatVoidMasks
+        elif event.key == '5':
+            image1 = fatImage
+            image2 = abdominalMasks
+        elif event.key == 'x':
+            showDiff = not showDiff
+        elif event.key == 'a':
+            sliceNumber = sliceNumber - 1
+        elif event.key == 'd':
+            sliceNumber = sliceNumber + 1
+        else:
+            return
+
+        # if sliceNumber < 0:
+        #     sliceNumber = 0
+
+        if showDiff:
+            plt.imshow(fuseImageFalseColor(image1[:, :, sliceNumber], image2[:, :, sliceNumber]))
+        else:
+            plt.imshow(image1[:, :, sliceNumber])
+
+        plt.title('Slice %i' % (sliceNumber))
+
+        event.canvas.draw()
+
+    fig = plt.figure(1)
+    fig.canvas.mpl_connect('key_press_event', press)
+
+    if showDiff:
+        plt.imshow(fuseImageFalseColor(fatImage[:, :, sliceNumber], fatImageMasks[:, :, sliceNumber]))
+    else:
+        plt.imshow(fatImage[:, :, sliceNumber])
+
+    global image1
+    global image2
+    image1 = fatImage
+    image2 = fatImageMasks
+    plt.title('Slice %i' % (sliceNumber))
+
+    plt.show()
 
         # sitk.WriteImage(sitk.JoinSeries(filledImages), os.path.join(constants.pathDir, 'debug',
         #                                                          'filledImage.img'))
