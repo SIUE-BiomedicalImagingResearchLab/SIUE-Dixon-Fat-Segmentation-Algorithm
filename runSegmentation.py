@@ -18,10 +18,6 @@ from utils import *
 def getDebugPath(str):
     return os.path.join(constants.pathDir, 'debug', str)
 
-sliceNumber = 150
-showDiff = True
-image1 = None
-image2 = None
 
 def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
     # fatImageMask2 is a closed version of fatImageMask. This is necessary around the
@@ -69,6 +65,7 @@ def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
 
     return fatVoidMask, abdominalMask, SCAT, VAT
 
+
 def segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask):
     # Lungs are defined as being within body and not containing any fat or water content
     # lungMask = bodyMask & ~fatImageMask & ~waterImageMask
@@ -106,6 +103,7 @@ def segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask):
     # Also I don't know how I would do periaortic fat. I also don't know what is considered epicardial fat
 
     return lungMask, thoracicMask
+
 
 # Segment depots of adipose tissue given Dixon MRI images
 def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
@@ -178,7 +176,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     lungMasks = np.zeros(fatImage.shape, bool)
     thoracicMasks = np.zeros(fatImage.shape, bool)
 
-    for slice in range(diaphragmSuperiorSlice, diaphragmSuperiorSlice+10): #fatImage.shape[2]): #0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(diaphragmSuperiorSlice, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -230,76 +228,5 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         np.save(getDebugPath('SCAT.npy'), SCAT)
         np.save(getDebugPath('VAT.npy'), VAT)
 
-    # Figure stuff
-    def press(event):
-        global image1
-        global image2
-        global sliceNumber
-        global showDiff
-
-        if event.key == '1':
-            image1 = fatImage
-            image2 = fatImageMasks
-        elif event.key == '2':
-            image1 = waterImage
-            image2 = waterImageMasks
-        elif event.key == '3':
-            image1 = fatImage
-            image2 = bodyMasks
-        elif event.key == '4':
-            image1 = fatImage
-            image2 = fatVoidMasks
-        elif event.key == '5':
-            image1 = fatImage
-            image2 = abdominalMasks
-        elif event.key == '6':
-            image1 = fatImage
-            image2 = SCAT
-        elif event.key == '7':
-            image1 = fatImage
-            image2 = VAT
-        elif event.key == '8':
-            image1 = fatImage
-            image2 = lungMasks
-        elif event.key == '9':
-            image1 = fatImage
-            image2 = thoracicMasks
-        elif event.key == 'x':
-            showDiff = not showDiff
-        elif event.key == 'a':
-            sliceNumber = sliceNumber - 1
-        elif event.key == 'd':
-            sliceNumber = sliceNumber + 1
-        else:
-            return
-
-        if sliceNumber < 0:
-            sliceNumber = 0
-
-        plt.clf()
-
-        if showDiff:
-            plt.imshow(fuseImageFalseColor(image1[:, :, sliceNumber], image2[:, :, sliceNumber]))
-        else:
-            plt.imshow(image1[:, :, sliceNumber])
-
-        plt.title('Slice %i' % (sliceNumber))
-
-        event.canvas.draw()
-
-    fig = plt.figure(1)
-    fig.canvas.mpl_connect('key_press_event', press)
-
-    if showDiff:
-        plt.imshow(fuseImageFalseColor(fatImage[:, :, sliceNumber], fatImageMasks[:, :, sliceNumber]))
-    else:
-        plt.imshow(fatImage[:, :, sliceNumber])
-
-    global image1
-    global image2
-    image1 = fatImage
-    image2 = fatImageMasks
-    plt.title('Slice %i' % (sliceNumber))
-
-    plt.show()
-
+        np.save(getDebugPath('lungMask.npy'), lungMasks)
+        np.save(getDebugPath('thoracicMask.npy'), thoracicMasks)
