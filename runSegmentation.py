@@ -23,6 +23,55 @@ showDiff = True
 image1 = None
 image2 = None
 
+def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
+    # fatImageMask2 is a closed version of fatImageMask. This is necessary around the
+    # umbilical cord since the fat image mask will not be connected all the way around
+    # Fill holes in the fat image mask and invert it to get the background of fat image
+    # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
+    # Next, remove small objects by morphologically opening
+    fatImageMask2 = skimage.morphology.binary_closing(fatImageMask, skimage.morphology.disk(3))
+    fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask2))
+    fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
+    fatVoidMask = np.logical_not(fatVoidMask)
+    fatVoidMask = skimage.morphology.binary_closing(fatVoidMask, skimage.morphology.disk(6))
+    fatVoidMask = skimage.morphology.binary_opening(fatVoidMask, skimage.morphology.disk(6))
+
+    # Use active contours to get the abdominal mask
+    # Originally, I attempted this using the convex hull but I was not a huge fan of the results
+    # since there were instances where the outline was concave and not convex
+    # For active contours, we need an initial contour. We will start with an outline of the body mask
+    # Find contours of body mask
+    image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Sort the contours by area and select the one with largest area, this will be the body mask contour
+    sortedContourArea = np.array([cv2.contourArea(contour) for contour in contours])
+    index = np.argmax(sortedContourArea)
+    initialContour = contours[index]
+    initialContour = initialContour.reshape(initialContour.shape[::2])
+
+    # Perform active contour snake algorithm to get outline of the abdominal mask
+    snakeContour = skimage.segmentation.active_contour(fatVoidMask.astype(np.uint8) * 255, initialContour, alpha=0.70,
+                                                       beta=0.01, gamma=0.1, max_iterations=2500, max_px_move=1.0,
+                                                       w_line=0.0, w_edge=5.0, convergence=0.1)
+
+    # Draw snake contour on abdominalMask variable
+    # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
+    # Perimeter is good for testing while polygon is the general use one
+    abdominalMask = np.zeros(fatVoidMask.shape, np.uint8)
+    rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
+    # rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
+    abdominalMask[cc, rr] = 1
+
+    # SCAT is all fat outside the abdominal mask
+    # VAT is all fat inside the abdominal mask
+    SCAT = np.logical_and(np.logical_not(abdominalMask), fatImageMask)
+    VAT = np.logical_and(abdominalMask, fatImageMask)
+
+    return fatVoidMask, abdominalMask, SCAT, VAT
+
+def segmentThoracicSlice():
+    i = 4
+
 # Segment depots of adipose tissue given Dixon MRI images
 def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
     # If debug is turned on, then create the directory where the debug files will be saved
@@ -45,6 +94,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     imageUpperSuperiorSlice = int(imageUpperTag.attrib['superiorSlice'])
     imageLowerInferiorSlice = int(imageLowerTag.attrib['inferiorSlice'])
     imageLowerSuperiorSlice = int(imageLowerTag.attrib['superiorSlice'])
+    diaphragmSuperiorSlice = int(configRoot.find('diaphragm').attrib['superiorSlice'])
 
     # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
     fatUpperImage = niiFatUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
@@ -86,6 +136,8 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     bodyMasks = np.zeros(fatImage.shape, bool)
     fatVoidMasks = np.zeros(fatImage.shape, bool)
     abdominalMasks = np.zeros(fatImage.shape, bool)
+    SCAT = np.zeros(fatImage.shape, bool)
+    VAT = np.zeros(fatImage.shape, bool)
     # blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
     # blankImage.CopyInformation(fatImage[:, :, 0])
     # fatImageMasks = [blankImage] * fatImage.GetDepth()
@@ -100,7 +152,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     # initialContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
     # finalContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
 
-    for slice in range(0, fatImage.shape[2] // 20):
+    for slice in range(0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -125,82 +177,16 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
         bodyMasks[:, :, slice] = bodyMask
 
-        # Fill holes in the fat image mask and invert it to get the background of fat image
-        # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
-        # Next, remove small objects by morphologically opening
-        fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
-        fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
-        fatVoidMask = np.logical_not(fatVoidMask)
-        fatVoidMask = skimage.morphology.binary_closing(fatVoidMask, skimage.morphology.disk(6))
-        fatVoidMask = skimage.morphology.binary_opening(fatVoidMask, skimage.morphology.disk(3))
-        fatVoidMasks[:, :, slice] = fatVoidMask
-
-        # TODO Seriously, it may be better to have 0->255 for the min/max intension. 0->1 isn't the greatest
-
-        # Use active contours to get the abdominal mask
-        # Originally, I attempted this using the convex hull but I was not a huge fan of the results
-        # since there were instances where the outline was concave and not convex
-        # For active contours, we need an initial contour. We will start with an outline of the body mask
-        # Find contours of body mask
-        image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Sort the contours by area and select the one with largest area, this will be the body mask contour
-        sortedContourArea = np.array([cv2.contourArea(contour) for contour in contours])
-        index = np.argmax(sortedContourArea)
-        initialContour = contours[index]
-        initialContour = initialContour.reshape(initialContour.shape[::2])
-
-        # Perform active contour snake algorithm to get outline of the abdominal mask
-        snakeContour = skimage.segmentation.active_contour(fatVoidMask.astype(np.uint8) * 255, initialContour, alpha=0.70, beta=0.01, gamma=0.1, max_iterations=2500, max_px_move=1.0, w_line=0.0, w_edge=5.0, convergence=0.1)
-
-        # Draw snake contour on abdominalMask variable
-        # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
-        # Perimeter is good for testing while polygon is the general use one
-        abdominalMask = np.zeros(fatVoidMask.shape, np.uint8)
-        rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
-        # rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
-        abdominalMask[cc, rr] = 1
-        abdominalMasks[:, :, slice] = abdominalMask.astype(bool)
-
-        # # Select contours 9->13, these can be seen in the figure below
-        # # Draw the contours onto contourImage to show what contours were found
-        # selectedContours = contours[9:13]
-        # contourImage = cv2.drawContours(cv2.cvtColor(binaryImage, cv2.COLOR_GRAY2BGR), selectedContours, -1,
-        #                                 (255, 0, 0), 3)
-
-        # For calculating convex hull, we want to combine the selected contour list into one numpy array of vertices
-
-        # Calculate the convex hull contour, which is a list of points for the convex hull
-
-        #
-        # # Draw the convex hull image on top of the contour image in green
-        # hullContourImage = cv2.drawContours(contourImage, [hullContour], 0, (0, 255, 0), 3)
-
-        # hull = cv2.convexHull(numpyAr.astype(int))
-        # img = np.zeros(numpyAr.shape, dtype=np.uint8)
-        # VATMask = cv2.fillConvexPoly(img, hull, 255)
-
-        # VATMasks[slice] = holesImage3
-        # filledImages[slice] = filledImage
-
-        # # Testing with Geodesic Active Contour
-        # waterImageMask # FIll background and invert intensity
-        # gradientMagImage = sitk.GradientMagnitude(waterImageMask)
-        # sigGradientMagImage = sitk.Sigmoid(gradientMagImage, 1.0, 0.0, 255, 0)
-        # initialContour = sitk.CannyEdgeDetection(sitk.Cast(bodyMask, sitk.sitkFloat32), 0.0, 0.0, [0.0] * 3, [0.01] * 3)
-        # # initialContour = sitk.BinaryFillhole(initialContour)
-        # # initialContour = sitk.BinaryThinning(initialContour)
-        # finalContour = sitk.GeodesicActiveContourLevelSet(initialContour, sigGradientMagImage, 0.01, -1.0, 1.0, 1.0, 1000)
-        #
-        # gradientMagImages[slice] = gradientMagImage
-        # sigGradientMagImages[slice] = sigGradientMagImage
-        # initialContours[slice] = initialContour
-        # finalContours[slice] = finalContour
-
-        # # Method doesn't work the best...
-        # VATMask = sitk.BinaryMorphologicalClosing(waterImageMask, 6, sitk.sitkBall)
-        # VATMask = sitk.BinaryMorphologicalOpening(VATMask, 6, sitk.sitkBall)
-        # VATMasks[slice] = VATMask
+        # Superior of diaphragm is divider between thoracic and abdominal region
+        if slice < diaphragmSuperiorSlice:
+            fatVoidMask, abdominalMask, SCATSlice, VATSlice = segmentAbdomenSlice(fatImageMask, waterImageMask,
+                                                                                  bodyMask)
+            fatVoidMasks[:, :, slice] = fatVoidMask
+            abdominalMasks[:, :, slice] = abdominalMask
+            SCAT[:, :, slice] = SCATSlice
+            VAT[:, :, slice] = VATSlice
+        else:
+            i = 4
 
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
@@ -248,8 +234,10 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         else:
             return
 
-        # if sliceNumber < 0:
-        #     sliceNumber = 0
+        if sliceNumber < 0:
+            sliceNumber = 0
+
+        plt.clf()
 
         if showDiff:
             plt.imshow(fuseImageFalseColor(image1[:, :, sliceNumber], image2[:, :, sliceNumber]))
