@@ -69,7 +69,7 @@ def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
 
     return fatVoidMask, abdominalMask, SCAT, VAT
 
-def segmentThoracicSlice():
+def segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask):
     i = 4
 
 # Segment depots of adipose tissue given Dixon MRI images
@@ -152,7 +152,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     # initialContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
     # finalContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
 
-    for slice in range(0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(80, 88): #diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -191,14 +191,15 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
-    # if constants.debug:
-    #     sitk.WriteImage(sitk.JoinSeries(fatImageMasks), os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
-    #     sitk.WriteImage(sitk.JoinSeries(waterImageMasks), os.path.join(constants.pathDir, 'debug',
-    #                                                                    'waterImageMask.img'))
-    #     sitk.WriteImage(sitk.JoinSeries(bodyMasks), os.path.join(constants.pathDir, 'debug',
-    #                                                              'bodyMask.img'))
-    #     sitk.WriteImage(sitk.JoinSeries(VATMasks), os.path.join(constants.pathDir, 'debug',
-    #                                                             'VATMask.img'))
+    if constants.debug:
+        np.save(getDebugPath('fatImageMask.npy'), fatImageMasks)
+        np.save(getDebugPath('waterImageMask.npy'), waterImageMasks)
+        np.save(getDebugPath('bodyMask.npy'), bodyMasks)
+
+        np.save(getDebugPath('fatVoidMask.npy'), fatVoidMasks)
+        np.save(getDebugPath('abdominalMask.npy'), abdominalMasks)
+        np.save(getDebugPath('SCAT.npy'), SCAT)
+        np.save(getDebugPath('VAT.npy'), VAT)
 
     # Figure stuff
     def press(event):
@@ -264,10 +265,3 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     plt.show()
 
-        # sitk.WriteImage(sitk.JoinSeries(filledImages), os.path.join(constants.pathDir, 'debug',
-        #                                                          'filledImage.img'))
-
-        # sitk.WriteImage(sitk.JoinSeries(gradientMagImages), os.path.join(constants.pathDir, 'debug', 'gradientMagImage.img'))
-        # sitk.WriteImage(sitk.JoinSeries(sigGradientMagImages), os.path.join(constants.pathDir, 'debug', 'sigGradientMagImage.img'))
-        # sitk.WriteImage(sitk.JoinSeries(initialContours), os.path.join(constants.pathDir, 'debug', 'initialContour.img'))
-        # sitk.WriteImage(sitk.JoinSeries(finalContours), os.path.join(constants.pathDir, 'debug', 'finalContour.img'))
