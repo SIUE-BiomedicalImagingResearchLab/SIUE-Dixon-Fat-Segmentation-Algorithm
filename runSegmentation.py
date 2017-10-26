@@ -18,7 +18,7 @@ from utils import *
 def getDebugPath(str):
     return os.path.join(constants.pathDir, 'debug', str)
 
-sliceNumber = 0
+sliceNumber = 150
 showDiff = True
 image1 = None
 image2 = None
@@ -70,7 +70,42 @@ def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
     return fatVoidMask, abdominalMask, SCAT, VAT
 
 def segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask):
-    i = 4
+    # Lungs are defined as being within body and not containing any fat or water content
+    # lungMask = bodyMask & ~fatImageMask & ~waterImageMask
+    # Next, remove any small objects from the binary image since the lungs will be large
+    # Fill any small holes within the lungs to get the full lungs
+    lungMask = np.logical_and(np.logical_and(bodyMask, np.logical_not(fatImageMask)), np.logical_not(waterImageMask))
+    lungMask = skimage.morphology.binary_opening(lungMask, skimage.morphology.disk(10))
+    lungMask = scipy.ndimage.morphology.binary_fill_holes(lungMask)
+
+    # Use active contours to get the thoracic mask
+    # For active contours, we need an initial contour. We will start with an outline of the body mask
+    # Find contours of body mask
+    image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Sort the contours by area and select the one with largest area, this will be the body mask contour
+    sortedContourArea = np.array([cv2.contourArea(contour) for contour in contours])
+    index = np.argmax(sortedContourArea)
+    initialContour = contours[index]
+    initialContour = initialContour.reshape(initialContour.shape[::2])
+
+    # Perform active contour snake algorithm to get outline of the abdominal mask
+    snakeContour = skimage.segmentation.active_contour(lungMask.astype(np.uint8) * 255, initialContour, alpha=0.70,
+                                                       beta=5.0, gamma=0.1, max_iterations=2500, max_px_move=1.0,
+                                                       w_line=0.0, w_edge=1.0, convergence=0.1)
+
+    # Draw snake contour on abdominalMask variable
+    # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
+    # Perimeter is good for testing while polygon is the general use one
+    thoracicMask = np.zeros(lungMask.shape, np.uint8)
+    # rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
+    rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
+    thoracicMask[cc, rr] = 1
+
+    # Segmenting based on the lungs doesnt give the best results because part of the epicardial fat is cut off
+    # Also I don't know how I would do periaortic fat. I also don't know what is considered epicardial fat
+
+    return lungMask, thoracicMask
 
 # Segment depots of adipose tissue given Dixon MRI images
 def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
@@ -131,28 +166,19 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
+    SCAT = np.zeros(fatImage.shape, bool)
+    VAT = np.zeros(fatImage.shape, bool)
+
     fatImageMasks = np.zeros(fatImage.shape, bool)
     waterImageMasks = np.zeros(fatImage.shape, bool)
     bodyMasks = np.zeros(fatImage.shape, bool)
     fatVoidMasks = np.zeros(fatImage.shape, bool)
     abdominalMasks = np.zeros(fatImage.shape, bool)
-    SCAT = np.zeros(fatImage.shape, bool)
-    VAT = np.zeros(fatImage.shape, bool)
-    # blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
-    # blankImage.CopyInformation(fatImage[:, :, 0])
-    # fatImageMasks = [blankImage] * fatImage.GetDepth()
-    # waterImageMasks = [blankImage] * fatImage.GetDepth()
-    # bodyMasks = [blankImage] * fatImage.GetDepth()
-    # VATMasks = [blankImage] * fatImage.GetDepth()
-    #
-    # filledImages = [blankImage] * fatImage.GetDepth()
 
-    # gradientMagImages = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-    # sigGradientMagImages = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-    # initialContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-    # finalContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
+    lungMasks = np.zeros(fatImage.shape, bool)
+    thoracicMasks = np.zeros(fatImage.shape, bool)
 
-    for slice in range(80, 88): #diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(diaphragmSuperiorSlice, diaphragmSuperiorSlice+10): #fatImage.shape[2]): #0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -186,7 +212,10 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
             SCAT[:, :, slice] = SCATSlice
             VAT[:, :, slice] = VATSlice
         else:
-            i = 4
+            lungMask, thoracicMask = segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask)
+
+            lungMasks[:, :, slice] = lungMask
+            thoracicMasks[:, :, slice] = thoracicMask
 
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
@@ -208,9 +237,6 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         global sliceNumber
         global showDiff
 
-        print('Press: ', event.key)
-        sys.stdout.flush()
-
         if event.key == '1':
             image1 = fatImage
             image2 = fatImageMasks
@@ -226,6 +252,18 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         elif event.key == '5':
             image1 = fatImage
             image2 = abdominalMasks
+        elif event.key == '6':
+            image1 = fatImage
+            image2 = SCAT
+        elif event.key == '7':
+            image1 = fatImage
+            image2 = VAT
+        elif event.key == '8':
+            image1 = fatImage
+            image2 = lungMasks
+        elif event.key == '9':
+            image1 = fatImage
+            image2 = thoracicMasks
         elif event.key == 'x':
             showDiff = not showDiff
         elif event.key == 'a':
