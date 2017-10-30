@@ -34,7 +34,7 @@ def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
     # case because binary_opening with a 5x5 disk SE was removing long, skinny objects that were not
     # wide enough to pass the test. However, their area is larger than smaller objects that I need to
     # remove. So remove_small_objects is better since it utilizes area.
-    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, 30)
+    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, constants.thresholdFatVoidsArea)
 
     # Use active contours to get the abdominal mask
     # Originally, I attempted this using the convex hull but I was not a huge fan of the results
