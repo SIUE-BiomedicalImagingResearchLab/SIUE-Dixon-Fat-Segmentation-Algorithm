@@ -8,6 +8,7 @@ import skimage.morphology
 import scipy.ndimage.morphology
 import skimage.segmentation
 import skimage.draw
+import skimage.measure
 
 import constants
 from biasCorrection import correctBias
@@ -20,17 +21,20 @@ def getDebugPath(str):
 
 
 def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
-    # fatImageMask2 is a closed version of fatImageMask. This is necessary around the
-    # umbilical cord since the fat image mask will not be connected all the way around
     # Fill holes in the fat image mask and invert it to get the background of fat image
     # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
-    # Next, remove small objects by morphologically opening
-    fatImageMask2 = skimage.morphology.binary_closing(fatImageMask, skimage.morphology.disk(3))
-    fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask2))
+    fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
     fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
     fatVoidMask = np.logical_not(fatVoidMask)
-    fatVoidMask = skimage.morphology.binary_closing(fatVoidMask, skimage.morphology.disk(6))
-    fatVoidMask = skimage.morphology.binary_opening(fatVoidMask, skimage.morphology.disk(6))
+
+    # Next, remove small objects based on their area
+    # Size is the area threshold of objects to use. This number of pixels must be set in an object
+    # for it to stay.
+    # remove_small_objects is more desirable than using a simple binary_opening operation in this
+    # case because binary_opening with a 5x5 disk SE was removing long, skinny objects that were not
+    # wide enough to pass the test. However, their area is larger than smaller objects that I need to
+    # remove. So remove_small_objects is better since it utilizes area.
+    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, 30)
 
     # Use active contours to get the abdominal mask
     # Originally, I attempted this using the convex hull but I was not a huge fan of the results
@@ -128,6 +132,12 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     imageLowerInferiorSlice = int(imageLowerTag.attrib['inferiorSlice'])
     imageLowerSuperiorSlice = int(imageLowerTag.attrib['superiorSlice'])
     diaphragmSuperiorSlice = int(configRoot.find('diaphragm').attrib['superiorSlice'])
+    umbilicisTag = configRoot.find('umbilicis')
+    umbilicisInferiorSlice = int(umbilicisTag.attrib['inferiorSlice'])
+    umbilicisSuperiorSlice = int(umbilicisTag.attrib['superiorSlice'])
+    umbilicisLeft = int(umbilicisTag.attrib['left'])
+    umbilicisRight = int(umbilicisTag.attrib['right'])
+    umbilicisCoronal = int(umbilicisTag.attrib['coronal'])
 
     # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
     fatUpperImage = niiFatUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
@@ -176,7 +186,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     lungMasks = np.zeros(fatImage.shape, bool)
     thoracicMasks = np.zeros(fatImage.shape, bool)
 
-    for slice in range(diaphragmSuperiorSlice, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(0, diaphragmSuperiorSlice):#, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -189,6 +199,13 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
         fatImageMask = (fatImageLabels == labelOrder[1])
         labelOrder, centroids, waterImageLabels = kmeans(waterImageSlice, constants.kMeanClusters)
         waterImageMask = (waterImageLabels == labelOrder[1])
+
+        # Algorithm assumes that the skin is a closed contour and fully connects
+        # This is a valid assumption but near the umbilicis, there is a discontinuity
+        # so this draws a line near there to create a closed contour
+        if umbilicisInferiorSlice <= slice <= umbilicisSuperiorSlice:
+            fatImageMask[umbilicisLeft:umbilicisRight, umbilicisCoronal] = True
+
         fatImageMasks[:, :, slice] = fatImageMask
         waterImageMasks[:, :, slice] = waterImageMask
 
