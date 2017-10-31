@@ -17,3 +17,45 @@ def fuseImageFalseColor(image1, image2):
     result = np.dstack((image2, image1, image2))
 
     return result
+
+def nearestNonzeroIdx(array, x, y, includeCurrent=False):
+    if includeCurrent:
+        prevValue = array[x, y]
+        array[x, y] = 0
+
+    r, c = np.nonzero(array)
+    ((r - x)**2 + (c - y)**2).argmin()
+
+    a[x,y] = tmp
+    min_idx = ((r - x)**2 + (c - y)**2).argmin()
+
+    if includeCurrent:
+        array[x, y] = prevValue
+
+    return r[min_idx], c[min_idx]
+
+def maxargwhere(array, axis=0):
+    def func(a):
+        x = np.argwhere(a)
+        return -1 if len(x) == 0 else x.max()
+
+    return np.apply_along_axis(func, axis, array)
+
+def minargwhere(array, axis=0):
+    def func(a):
+        x = np.argwhere(a)
+        return -1 if len(x) == 0 else x.min()
+
+    return np.apply_along_axis(func, axis, array)
+
+def nearestargwhere(array, index=0, axis=0):
+    def func(a):
+        x = np.argwhere(a)
+        if len(x) == 0:
+            return -1
+
+        minIndex = np.abs(x - index).argmin()
+
+        return x[minIndex]
+
+    return np.apply_along_axis(func, axis, array)

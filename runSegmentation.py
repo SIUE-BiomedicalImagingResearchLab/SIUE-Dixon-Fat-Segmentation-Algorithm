@@ -1,14 +1,11 @@
 import os
 import time
-import sys
 
-import SimpleITK as sitk
-import matplotlib.pyplot as plt
-import skimage.morphology
 import scipy.ndimage.morphology
-import skimage.segmentation
 import skimage.draw
 import skimage.measure
+import skimage.morphology
+import skimage.segmentation
 
 import constants
 from biasCorrection import correctBias
@@ -16,11 +13,12 @@ from utils import *
 
 
 # Get resulting path for debug files
-def getDebugPath(str):
-    return os.path.join(constants.pathDir, 'debug', str)
+def getDebugPath(path):
+    return os.path.join(constants.pathDir, 'debug', path)
 
 
-def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
+# noinspection PyUnusedLocal
+def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
     # Fill holes in the fat image mask and invert it to get the background of fat image
     # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
     fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
@@ -34,7 +32,9 @@ def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
     # case because binary_opening with a 5x5 disk SE was removing long, skinny objects that were not
     # wide enough to pass the test. However, their area is larger than smaller objects that I need to
     # remove. So remove_small_objects is better since it utilizes area.
-    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, constants.thresholdFatVoidsArea)
+    # Odd issue where a warning will appear saying that a boolean image should be given. This is a bug in skimage
+    # because I traced it down and the label function is returning odd values
+    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, constants.thresholdAbdominalFatVoidsArea)
 
     # Use active contours to get the abdominal mask
     # Originally, I attempted this using the convex hull but I was not a huge fan of the results
@@ -70,16 +70,28 @@ def segmentAbdomenSlice(fatImageMask, waterImageMask, bodyMask):
     return fatVoidMask, abdominalMask, SCAT, VAT
 
 
-def segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask):
-    # Lungs are defined as being within body and not containing any fat or water content
-    # lungMask = bodyMask & ~fatImageMask & ~waterImageMask
-    # Next, remove any small objects from the binary image since the lungs will be large
-    # Fill any small holes within the lungs to get the full lungs
-    lungMask = np.logical_and(np.logical_and(bodyMask, np.logical_not(fatImageMask)), np.logical_not(waterImageMask))
-    lungMask = skimage.morphology.binary_opening(lungMask, skimage.morphology.disk(10))
-    lungMask = scipy.ndimage.morphology.binary_fill_holes(lungMask)
+def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial, CATPosterior, CATAnterior,
+                         CATInferior, CATSuperior):
+    # Fill holes in the fat image mask and invert it to get the background of fat image
+    # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
+    fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
+    fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
+    fatVoidMask = np.logical_not(fatVoidMask)
 
-    # Use active contours to get the thoracic mask
+    # Next, remove small objects based on their area
+    # Size is the area threshold of objects to use. This number of pixels must be set in an object
+    # for it to stay.
+    # remove_small_objects is more desirable than using a simple binary_opening operation in this
+    # case because binary_opening with a 5x5 disk SE was removing long, skinny objects that were not
+    # wide enough to pass the test. However, their area is larger than smaller objects that I need to
+    # remove. So remove_small_objects is better since it utilizes area.
+    # Odd issue where a warning will appear saying that a boolean image should be given. This is a bug in skimage
+    # because I traced it down and the label function is returning odd values
+    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, constants.thresholdThoracicFatVoidsArea)
+
+    # Use active contours to get the abdominal mask
+    # Originally, I attempted this using the convex hull but I was not a huge fan of the results
+    # since there were instances where the outline was concave and not convex
     # For active contours, we need an initial contour. We will start with an outline of the body mask
     # Find contours of body mask
     image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -91,22 +103,72 @@ def segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask):
     initialContour = initialContour.reshape(initialContour.shape[::2])
 
     # Perform active contour snake algorithm to get outline of the abdominal mask
-    snakeContour = skimage.segmentation.active_contour(lungMask.astype(np.uint8) * 255, initialContour, alpha=0.70,
-                                                       beta=5.0, gamma=0.1, max_iterations=2500, max_px_move=1.0,
-                                                       w_line=0.0, w_edge=1.0, convergence=0.1)
+    snakeContour = skimage.segmentation.active_contour(fatVoidMask.astype(np.uint8) * 255, initialContour, alpha=0.70,
+                                                       beta=0.01, gamma=0.1, max_iterations=2500, max_px_move=1.0,
+                                                       w_line=0.0, w_edge=5.0, convergence=0.1)
 
     # Draw snake contour on abdominalMask variable
     # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
     # Perimeter is good for testing while polygon is the general use one
-    thoracicMask = np.zeros(lungMask.shape, np.uint8)
-    # rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
-    rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
+    thoracicMask = np.zeros(fatVoidMask.shape, np.uint8)
+    rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
+    # rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
     thoracicMask[cc, rr] = 1
 
-    # Segmenting based on the lungs doesnt give the best results because part of the epicardial fat is cut off
-    # Also I don't know how I would do periaortic fat. I also don't know what is considered epicardial fat
+    # Lungs are defined as being within body and not containing any fat or water content
+    # lungMask = bodyMask & ~fatImageMask & ~waterImageMask
+    # Next, remove any small objects from the binary image since the lungs will be large
+    # Fill any small holes within the lungs to get the full lungs
+    lungMask = np.logical_and(np.logical_and(bodyMask, np.logical_not(fatImageMask)), np.logical_not(waterImageMask))
+    lungMask = skimage.morphology.binary_opening(lungMask, skimage.morphology.disk(10))
+    lungMask = scipy.ndimage.morphology.binary_fill_holes(lungMask)
+    # lungMask = skimage.morphology.binary_opening(lungMask, skimage.morphology.disk(8))
 
-    return lungMask, thoracicMask
+    # SCAT is all fat outside the thoracic mask
+    # ITAT is all fat inside the thoracic mask
+    SCAT = np.logical_and(np.logical_not(thoracicMask), fatImageMask)
+    ITAT = np.logical_and(thoracicMask, fatImageMask)
+    CAT = np.zeros_like(ITAT, dtype=bool)
+
+    if CATInferior <= slice <= CATSuperior:
+        posterior = int(np.round(np.interp(slice, CATAxial, CATPosterior)))
+        anterior = int(np.round(np.interp(slice, CATAxial, CATAnterior)))
+
+        # Label the objects of lung mask. There should only be two objects, the left and right lung
+        # Get centroid of each object. Left lung is on left side, so centroid should be below half of total coronal
+        # plane size
+        lungMaskLabels = skimage.morphology.label(lungMask)
+        lungProps = skimage.measure.regionprops(lungMaskLabels, cache=False)
+        if lungProps[0].centroid[0] <= fatImageMask.shape[0] // 2:
+            leftLung = (lungMaskLabels == 1)
+            rightLung = (lungMaskLabels == 2)
+        else:
+            leftLung = (lungMaskLabels == 2)
+            rightLung = (lungMaskLabels == 1)
+
+        # For the left and right lung, retrieve the outer contour index on a row-by-row basis.
+        # Left lung will be lower index and right-lung will be upper index for ROI of CAT
+        leftIndices = maxargwhere(leftLung, axis=0)
+        rightIndices = minargwhere(rightLung, axis=0)
+
+        # Only extract the relevant indices from posterior to anterior slices
+        # Any -1 values indicate there was no lung mask located there, so set it to the minimum index value
+        leftIndices = leftIndices[posterior:anterior]
+        rightIndices = rightIndices[posterior:anterior]
+        leftIndices[leftIndices == -1] = leftIndices[leftIndices != -1].min()
+        rightIndices[rightIndices == -1] = rightIndices.max()
+
+        # Create CATMask which is a mask of where fat can be located around the heart
+        # From coronal plane, the upper and lower bounds are determined from user entered points
+        # From sagittal plane, this is calculated based on the lungs going around the heart
+        CATMask = np.zeros_like(ITAT, dtype=bool)
+        for heartSlice, leftIndex, rightIndex in zip(range(posterior, anterior), leftIndices, rightIndices):
+            CATMask[leftIndex:rightIndex, heartSlice] = True
+
+        # CAT is defined as ITAT inside the CATMask
+        CAT[CATMask] = ITAT[CATMask]
+
+    return fatVoidMask, thoracicMask, lungMask, SCAT, ITAT, CAT
 
 
 # Segment depots of adipose tissue given Dixon MRI images
@@ -117,7 +179,7 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     if constants.debug:
         try:
             os.makedirs(getDebugPath(''))
-        except:
+        except FileExistsError:
             pass
 
     # Get the root of the config XML file
@@ -138,6 +200,36 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     umbilicisLeft = int(umbilicisTag.attrib['left'])
     umbilicisRight = int(umbilicisTag.attrib['right'])
     umbilicisCoronal = int(umbilicisTag.attrib['coronal'])
+
+    # Load cardiac adipose tissue (CAT) tag and corresponding lines in axial plane
+    CATTag = configRoot.find('CAT')
+    CATAxial = []
+    CATPosterior = []
+    CATAnterior = []
+    # Foreach line in the CAT tag, append to the three arrays
+    for line in CATTag:
+        if line.tag != 'line':
+            print('Invalid tag for CAT, must be line')
+            continue
+
+        CATAxial.append(int(line.attrib['axial']))
+        CATPosterior.append(int(line.attrib['posterior']))
+        CATAnterior.append(int(line.attrib['anterior']))
+
+    # Convert three arrays to NumPy and get minimum/maximum axial slice
+    # The min/max axial slice is used to determine the start and stopping point
+    # of calculating CAT
+    CATAxial = np.array(CATAxial)
+    CATPosterior = np.array(CATPosterior)
+    CATAnterior = np.array(CATAnterior)
+    CATInferior = CATAxial.min()
+    CATSuperior = CATAxial.max()
+
+    # Sort the three arrays based on CAT axial, ascending
+    CATAxialSortedInds = CATAxial.argsort()
+    CATAxial = CATAxial[CATAxialSortedInds]
+    CATPosterior = CATPosterior[CATAxialSortedInds]
+    CATAnterior = CATAnterior[CATAxialSortedInds]
 
     # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
     fatUpperImage = niiFatUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
@@ -174,19 +266,21 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
-    SCAT = np.zeros(fatImage.shape, bool)
-    VAT = np.zeros(fatImage.shape, bool)
-
     fatImageMasks = np.zeros(fatImage.shape, bool)
     waterImageMasks = np.zeros(fatImage.shape, bool)
     bodyMasks = np.zeros(fatImage.shape, bool)
     fatVoidMasks = np.zeros(fatImage.shape, bool)
     abdominalMasks = np.zeros(fatImage.shape, bool)
-
-    lungMasks = np.zeros(fatImage.shape, bool)
     thoracicMasks = np.zeros(fatImage.shape, bool)
+    lungMasks = np.zeros(fatImage.shape, bool)
 
-    for slice in range(0, diaphragmSuperiorSlice):#, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    # Final 3D volume results
+    SCAT = np.zeros(fatImage.shape, bool)
+    VAT = np.zeros(fatImage.shape, bool)
+    ITAT = np.zeros(fatImage.shape, bool)
+    CAT = np.zeros(fatImage.shape, bool)
+
+    for slice in range(diaphragmSuperiorSlice, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
@@ -220,17 +314,24 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
         # Superior of diaphragm is divider between thoracic and abdominal region
         if slice < diaphragmSuperiorSlice:
-            fatVoidMask, abdominalMask, SCATSlice, VATSlice = segmentAbdomenSlice(fatImageMask, waterImageMask,
-                                                                                  bodyMask)
+            fatVoidMask, abdominalMask, SCATSlice, VATSlice = \
+                segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask)
+
             fatVoidMasks[:, :, slice] = fatVoidMask
             abdominalMasks[:, :, slice] = abdominalMask
             SCAT[:, :, slice] = SCATSlice
             VAT[:, :, slice] = VATSlice
         else:
-            lungMask, thoracicMask = segmentThoracicSlice(fatImageMask, waterImageMask, bodyMask)
+            fatVoidMask, thoracicMask, lungMask, SCATSlice, ITATSlice, CATSlice = \
+                segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial, CATPosterior,
+                                     CATAnterior, CATInferior, CATSuperior)
 
-            lungMasks[:, :, slice] = lungMask
+            fatVoidMasks[:, :, slice] = fatVoidMask
             thoracicMasks[:, :, slice] = thoracicMask
+            lungMasks[:, :, slice] = lungMask
+            SCAT[:, :, slice] = SCATSlice
+            ITAT[:, :, slice] = ITATSlice
+            CAT[:, :, slice] = CATSlice
 
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
@@ -242,8 +343,11 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
         np.save(getDebugPath('fatVoidMask.npy'), fatVoidMasks)
         np.save(getDebugPath('abdominalMask.npy'), abdominalMasks)
-        np.save(getDebugPath('SCAT.npy'), SCAT)
-        np.save(getDebugPath('VAT.npy'), VAT)
 
         np.save(getDebugPath('lungMask.npy'), lungMasks)
         np.save(getDebugPath('thoracicMask.npy'), thoracicMasks)
+
+    np.save(getDebugPath('SCAT.npy'), SCAT)
+    np.save(getDebugPath('VAT.npy'), VAT)
+    np.save(getDebugPath('ITAT.npy'), ITAT)
+    np.save(getDebugPath('CAT.npy'), CAT)

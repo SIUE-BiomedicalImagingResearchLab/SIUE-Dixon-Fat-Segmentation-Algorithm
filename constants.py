@@ -29,6 +29,10 @@ shrinkFactor = 4
 # Number of clusters for the K-means algorithm for segmenting images
 kMeanClusters = 2
 
-# Threshold area for the fat voids mask. This is used to remove objects smaller than this threshold when determining
-# the fat voids area.
-thresholdFatVoidsArea = 30
+# Threshold area for the fat voids mask in abdominal region. This is used to remove objects smaller than this
+# threshold when determining the fat voids area.
+thresholdAbdominalFatVoidsArea = 30
+
+# Threshold area for the fat voids mask in thoracic region. This is used to remove objects smaller than this
+# threshold when determining the fat voids area.
+thresholdThoracicFatVoidsArea = 250
