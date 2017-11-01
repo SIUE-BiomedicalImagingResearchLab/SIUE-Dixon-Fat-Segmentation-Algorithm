@@ -1,66 +1,233 @@
+import os
 import time
 
-import SimpleITKutils as sitku
-from biasCorrection import *
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
+import scipy.ndimage.morphology
+import skimage.draw
+import skimage.measure
+import skimage.morphology
+import skimage.segmentation
+
+import constants
+from biasCorrection import correctBias
+from utils import *
+
+
+# Get resulting path for debug files
+def getDebugPath(path):
+    return os.path.join(constants.pathDir, 'debug', path)
+
+
+# noinspection PyUnusedLocal
+def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
+    # Fill holes in the fat image mask and invert it to get the background of fat image
+    # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
+    fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
+    fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
+    fatVoidMask = np.logical_not(fatVoidMask)
+
+    # Next, remove small objects based on their area
+    # Size is the area threshold of objects to use. This number of pixels must be set in an object
+    # for it to stay.
+    # remove_small_objects is more desirable than using a simple binary_opening operation in this
+    # case because binary_opening with a 5x5 disk SE was removing long, skinny objects that were not
+    # wide enough to pass the test. However, their area is larger than smaller objects that I need to
+    # remove. So remove_small_objects is better since it utilizes area.
+    # Odd issue where a warning will appear saying that a boolean image should be given. This is a bug in skimage
+    # because I traced it down and the label function is returning odd values
+    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, constants.thresholdAbdominalFatVoidsArea)
+
+    # Use active contours to get the abdominal mask
+    # Originally, I attempted this using the convex hull but I was not a huge fan of the results
+    # since there were instances where the outline was concave and not convex
+    # For active contours, we need an initial contour. We will start with an outline of the body mask
+    # Find contours of body mask
+    image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Sort the contours by area and select the one with largest area, this will be the body mask contour
+    sortedContourArea = np.array([cv2.contourArea(contour) for contour in contours])
+    index = np.argmax(sortedContourArea)
+    initialContour = contours[index]
+    initialContour = initialContour.reshape(initialContour.shape[::2])
+
+    # Perform active contour snake algorithm to get outline of the abdominal mask
+    snakeContour = skimage.segmentation.active_contour(fatVoidMask.astype(np.uint8) * 255, initialContour, alpha=0.70,
+                                                       beta=0.01, gamma=0.1, max_iterations=2500, max_px_move=1.0,
+                                                       w_line=0.0, w_edge=5.0, convergence=0.1)
+
+    # Draw snake contour on abdominalMask variable
+    # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
+    # Perimeter is good for testing while polygon is the general use one
+    abdominalMask = np.zeros(fatVoidMask.shape, np.uint8)
+    rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
+    # rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
+    abdominalMask[cc, rr] = 1
+
+    # SCAT is all fat outside the abdominal mask
+    # VAT is all fat inside the abdominal mask
+    SCAT = np.logical_and(np.logical_not(abdominalMask), fatImageMask)
+    VAT = np.logical_and(abdominalMask, fatImageMask)
+
+    return fatVoidMask, abdominalMask, SCAT, VAT
+
+
+def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial, CATPosterior, CATAnterior,
+                         CATInferior, CATSuperior):
+    # Fill holes in the fat image mask and invert it to get the background of fat image
+    # OR the fat background mask and fat image mask and take NOT of mask to get the fat void mask
+    fatBackgroundMask = np.logical_not(scipy.ndimage.morphology.binary_fill_holes(fatImageMask))
+    fatVoidMask = np.logical_or(fatBackgroundMask, fatImageMask)
+    fatVoidMask = np.logical_not(fatVoidMask)
+
+    # Next, remove small objects based on their area
+    # Size is the area threshold of objects to use. This number of pixels must be set in an object
+    # for it to stay.
+    # remove_small_objects is more desirable than using a simple binary_opening operation in this
+    # case because binary_opening with a 5x5 disk SE was removing long, skinny objects that were not
+    # wide enough to pass the test. However, their area is larger than smaller objects that I need to
+    # remove. So remove_small_objects is better since it utilizes area.
+    # Odd issue where a warning will appear saying that a boolean image should be given. This is a bug in skimage
+    # because I traced it down and the label function is returning odd values
+    fatVoidMask = skimage.morphology.remove_small_objects(fatVoidMask, constants.thresholdThoracicFatVoidsArea)
+
+    # Use active contours to get the abdominal mask
+    # Originally, I attempted this using the convex hull but I was not a huge fan of the results
+    # since there were instances where the outline was concave and not convex
+    # For active contours, we need an initial contour. We will start with an outline of the body mask
+    # Find contours of body mask
+    image, contours, hierarchy = cv2.findContours(bodyMask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Sort the contours by area and select the one with largest area, this will be the body mask contour
+    sortedContourArea = np.array([cv2.contourArea(contour) for contour in contours])
+    index = np.argmax(sortedContourArea)
+    initialContour = contours[index]
+    initialContour = initialContour.reshape(initialContour.shape[::2])
+
+    # Perform active contour snake algorithm to get outline of the abdominal mask
+    snakeContour = skimage.segmentation.active_contour(fatVoidMask.astype(np.uint8) * 255, initialContour, alpha=0.70,
+                                                       beta=0.01, gamma=0.1, max_iterations=2500, max_px_move=1.0,
+                                                       w_line=0.0, w_edge=5.0, convergence=0.1)
+
+    # Draw snake contour on abdominalMask variable
+    # Two options, polygon fills in the area and polygon_perimeter only draws the perimeter
+    # Perimeter is good for testing while polygon is the general use one
+    thoracicMask = np.zeros(fatVoidMask.shape, np.uint8)
+    rr, cc = skimage.draw.polygon(snakeContour[:, 0], snakeContour[:, 1])
+    # rr, cc = skimage.draw.polygon_perimeter(snakeContour[:, 0], snakeContour[:, 1])
+    thoracicMask[cc, rr] = 1
+
+    # Lungs are defined as being within body and not containing any fat or water content
+    # lungMask = bodyMask & ~fatImageMask & ~waterImageMask
+    # Next, remove any small objects from the binary image since the lungs will be large
+    # Fill any small holes within the lungs to get the full lungs
+    lungMask = np.logical_and(np.logical_and(bodyMask, np.logical_not(fatImageMask)), np.logical_not(waterImageMask))
+    lungMask = skimage.morphology.binary_opening(lungMask, skimage.morphology.disk(10))
+    lungMask = scipy.ndimage.morphology.binary_fill_holes(lungMask)
+    # lungMask = skimage.morphology.binary_opening(lungMask, skimage.morphology.disk(8))
+
+    # SCAT is all fat outside the thoracic mask
+    # ITAT is all fat inside the thoracic mask
+    SCAT = np.logical_and(np.logical_not(thoracicMask), fatImageMask)
+    ITAT = np.logical_and(thoracicMask, fatImageMask)
+    CAT = np.zeros_like(ITAT, dtype=bool)
+
+    if CATInferior <= slice <= CATSuperior:
+        posterior = int(np.round(np.interp(slice, CATAxial, CATPosterior)))
+        anterior = int(np.round(np.interp(slice, CATAxial, CATAnterior)))
+
+        # Label the objects of lung mask. There should only be two objects, the left and right lung
+        # Get centroid of each object. Left lung is on left side, so centroid should be below half of total coronal
+        # plane size
+        lungMaskLabels = skimage.morphology.label(lungMask)
+        lungProps = skimage.measure.regionprops(lungMaskLabels, cache=False)
+        if lungProps[0].centroid[0] <= fatImageMask.shape[0] // 2:
+            leftLung = (lungMaskLabels == 1)
+            rightLung = (lungMaskLabels == 2)
+        else:
+            leftLung = (lungMaskLabels == 2)
+            rightLung = (lungMaskLabels == 1)
+
+        # For the left and right lung, retrieve the outer contour index on a row-by-row basis.
+        # Left lung will be lower index and right-lung will be upper index for ROI of CAT
+        leftIndices = maxargwhere(leftLung, axis=0)
+        rightIndices = minargwhere(rightLung, axis=0)
+
+        # Only extract the relevant indices from posterior to anterior slices
+        # Any -1 values indicate there was no lung mask located there, so set it to the minimum index value
+        leftIndices = leftIndices[posterior:anterior]
+        rightIndices = rightIndices[posterior:anterior]
+        leftIndices[leftIndices == -1] = leftIndices[leftIndices != -1].min()
+        rightIndices[rightIndices == -1] = rightIndices.max()
+
+        # Create CATMask which is a mask of where fat can be located around the heart
+        # From coronal plane, the upper and lower bounds are determined from user entered points
+        # From sagittal plane, this is calculated based on the lungs going around the heart
+        CATMask = np.zeros_like(ITAT, dtype=bool)
+        for heartSlice, leftIndex, rightIndex in zip(range(posterior, anterior), leftIndices, rightIndices):
+            CATMask[leftIndex:rightIndex, heartSlice] = True
+
+        # CAT is defined as ITAT inside the CATMask
+        CAT[CATMask] = ITAT[CATMask]
+
+    return fatVoidMask, thoracicMask, lungMask, SCAT, ITAT, CAT
 
 
 # Segment depots of adipose tissue given Dixon MRI images
-def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
+def runSegmentation(fatImage, waterImage, config):
     # If debug is turned on, then create the directory where the debug files will be saved
     # The makedirs command is in try/catch because if it already exists, it will throw an exception and we just want
     # to continue in that case
     if constants.debug:
         try:
-            os.makedirs(os.path.join(constants.pathDir, 'debug'))
-        except:
+            os.makedirs(getDebugPath(''))
+        except FileExistsError:
             pass
 
     # Get the root of the config XML file
     configRoot = config.getroot()
 
-    # Piece together upper and lower images for fat and water
-    # Retrieve the inferior and superior axial slice from config file for upper and lower images
-    imageUpperTag = configRoot.find('imageUpper')
-    imageLowerTag = configRoot.find('imageLower')
-    imageUpperInferiorSlice = int(imageUpperTag.attrib['inferiorSlice'])
-    imageUpperSuperiorSlice = int(imageUpperTag.attrib['superiorSlice'])
-    imageLowerInferiorSlice = int(imageLowerTag.attrib['inferiorSlice'])
-    imageLowerSuperiorSlice = int(imageLowerTag.attrib['superiorSlice'])
+    diaphragmSuperiorSlice = int(configRoot.find('diaphragm').attrib['superiorSlice'])
+    umbilicisTag = configRoot.find('umbilicis')
+    umbilicisInferiorSlice = int(umbilicisTag.attrib['inferiorSlice'])
+    umbilicisSuperiorSlice = int(umbilicisTag.attrib['superiorSlice'])
+    umbilicisLeft = int(umbilicisTag.attrib['left'])
+    umbilicisRight = int(umbilicisTag.attrib['right'])
+    umbilicisCoronal = int(umbilicisTag.attrib['coronal'])
 
-    # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
-    fatUpperImage = niiFatUpper[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    fatLowerImage = niiFatLower[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
-    waterUpperImage = niiWaterUpper[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    waterLowerImage = niiWaterLower[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
+    # Load cardiac adipose tissue (CAT) tag and corresponding lines in axial plane
+    CATTag = configRoot.find('CAT')
+    CATAxial = []
+    CATPosterior = []
+    CATAnterior = []
+    # Foreach line in the CAT tag, append to the three arrays
+    for line in CATTag:
+        if line.tag != 'line':
+            print('Invalid tag for CAT, must be line')
+            continue
 
-    # # TODO Do all of this numpy operations with ITK so I can just be consistent
-    # Cast the four images to 32-bit floats
-    fatUpperImage = sitk.Cast(fatUpperImage, sitk.sitkFloat32)
-    fatLowerImage = sitk.Cast(fatLowerImage, sitk.sitkFloat32)
-    waterUpperImage = sitk.Cast(waterUpperImage, sitk.sitkFloat32)
-    waterLowerImage = sitk.Cast(waterLowerImage, sitk.sitkFloat32)
+        CATAxial.append(int(line.attrib['axial']))
+        CATPosterior.append(int(line.attrib['posterior']))
+        CATAnterior.append(int(line.attrib['anterior']))
 
-    # Concatenate the lower and upper image into one along the Z dimension
-    # TODO Consider removing this and performing segmentation on upper/lower pieces separately
-    fatImage = sitku.concatenate((fatLowerImage, fatUpperImage), 2)
-    waterImage = sitku.concatenate((waterLowerImage, waterUpperImage), 2)
+    # Convert three arrays to NumPy and get minimum/maximum axial slice
+    # The min/max axial slice is used to determine the start and stopping point
+    # of calculating CAT
+    CATAxial = np.array(CATAxial)
+    CATPosterior = np.array(CATPosterior)
+    CATAnterior = np.array(CATAnterior)
+    CATInferior = CATAxial.min()
+    CATSuperior = CATAxial.max()
 
-    # TODO Create procedural function for MinimumMaximumImageFilter in SimpleITK
-    # TODO Add option to specify parameters like Function(image, param=Value) to SimpleITK
-    # Todo create procedural function for StatisticsImageFilter in SimpleITK
-    # Normalize the fat/water images so that the intensities are between (0.0, 1.0)
-    fatImage = sitk.RescaleIntensity(fatImage, 0.0, 1.0)
-    waterImage = sitk.RescaleIntensity(waterImage, 0.0, 1.0)
+    # Sort the three arrays based on CAT axial, ascending
+    CATAxialSortedInds = CATAxial.argsort()
+    CATAxial = CATAxial[CATAxialSortedInds]
+    CATPosterior = CATPosterior[CATAxialSortedInds]
+    CATAnterior = CATAnterior[CATAxialSortedInds]
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    if os.path.exists(os.path.join(constants.pathDir, 'debug', 'fatImage.img')) and \
-            os.path.exists(os.path.join(constants.pathDir, 'debug', 'waterImage.img')):
-        fatImage = sitk.ReadImage(os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
-        waterImage = sitk.ReadImage(os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
+    if os.path.exists(getDebugPath('fatImage.npy')) and os.path.exists(getDebugPath('waterImage.npy')):
+        fatImage = np.load(getDebugPath('fatImage.npy'))
+        waterImage = np.load(getDebugPath('waterImage.npy'))
     else:
         fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
                                prefix='fatImageBiasCorrection')
@@ -71,135 +238,93 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
 
     # Print out the fat and water image after bias correction
     if constants.debug:
-        sitk.WriteImage(fatImage, os.path.join(constants.pathDir, 'debug', 'fatImage.img'))
-        sitk.WriteImage(waterImage, os.path.join(constants.pathDir, 'debug', 'waterImage.img'))
+        np.save(getDebugPath('fatImage.npy'), fatImage)
+        np.save(getDebugPath('waterImage.npy'), waterImage)
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
-    blankImage = sitk.Image(fatImage.GetWidth(), fatImage.GetHeight(), sitk.sitkUInt8)
-    blankImage.CopyInformation(fatImage[:, :, 0])
-    fatImageMasks = [blankImage] * fatImage.GetDepth()
-    waterImageMasks = [blankImage] * fatImage.GetDepth()
-    bodyMasks = [blankImage] * fatImage.GetDepth()
-    VATMasks = [blankImage] * fatImage.GetDepth()
+    fatImageMasks = np.zeros(fatImage.shape, bool)
+    waterImageMasks = np.zeros(fatImage.shape, bool)
+    bodyMasks = np.zeros(fatImage.shape, bool)
+    fatVoidMasks = np.zeros(fatImage.shape, bool)
+    abdominalMasks = np.zeros(fatImage.shape, bool)
+    thoracicMasks = np.zeros(fatImage.shape, bool)
+    lungMasks = np.zeros(fatImage.shape, bool)
 
-    filledImages = [blankImage] * fatImage.GetDepth()
+    # Final 3D volume results
+    SCAT = np.zeros(fatImage.shape, bool)
+    VAT = np.zeros(fatImage.shape, bool)
+    ITAT = np.zeros(fatImage.shape, bool)
+    CAT = np.zeros(fatImage.shape, bool)
 
-    # gradientMagImages = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-    # sigGradientMagImages = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-    # initialContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-    # finalContours = [sitk.Cast(blankImage, sitk.sitkFloat32)] * fatImage.GetDepth()
-
-    for slice in range(0, fatImage.GetDepth() // 3):
+    for slice in range(0, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
         waterImageSlice = waterImage[:, :, slice]
 
         # Segment fat/water images using K-means
-        # The value 1 indicates background object so invert it by setting all 0 values to 1
-        fatImageMask = sitk.ScalarImageKmeans(fatImageSlice, [0.0] * constants.kMeanClusters) == 0
-        waterImageMask = sitk.ScalarImageKmeans(waterImageSlice, [0.0] * constants.kMeanClusters) == 0
-        fatImageMasks[slice] = fatImageMask
-        waterImageMasks[slice] = waterImageMask
+        # labelOrder contains the labels sorted from smallest intensity to greatest
+        # Since our k = 2, we want the higher intensity label at index 1
+        labelOrder, centroids, fatImageLabels = kmeans(fatImageSlice, constants.kMeanClusters)
+        fatImageMask = (fatImageLabels == labelOrder[1])
+        labelOrder, centroids, waterImageLabels = kmeans(waterImageSlice, constants.kMeanClusters)
+        waterImageMask = (waterImageLabels == labelOrder[1])
 
-        # Consider after N4 Bias correction switching to NumPy and ski image for algorithms...
+        # Algorithm assumes that the skin is a closed contour and fully connects
+        # This is a valid assumption but near the umbilicis, there is a discontinuity
+        # so this draws a line near there to create a closed contour
+        if umbilicisInferiorSlice <= slice <= umbilicisSuperiorSlice:
+            fatImageMask[umbilicisLeft:umbilicisRight, umbilicisCoronal] = True
+
+        fatImageMasks[:, :, slice] = fatImageMask
+        waterImageMasks[:, :, slice] = waterImageMask
 
         # Get body mask by combining fat and water masks
         # Apply some closing to the image mask to connect any small gaps (such as at umbilical cord)
         # Fill all holes which will create a solid body mask
         # Remove small objects that are artifacts from segmentation
-        bodyMask = fatImageMask | waterImageMask
-        bodyMask = sitk.BinaryMorphologicalClosing(bodyMask, 3, sitk.sitkBall)
-        bodyMask = sitk.BinaryFillhole(bodyMask)
+        bodyMask = np.logical_or(fatImageMask, waterImageMask)
+        bodyMask = skimage.morphology.binary_closing(bodyMask, skimage.morphology.disk(3))
+        bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
+        bodyMasks[:, :, slice] = bodyMask
 
-        # TODO Determine why BinaryMinMaxCurvativeFlow requires real types for a binary image?
-        bodyMasks[slice] = bodyMask
+        # Superior of diaphragm is divider between thoracic and abdominal region
+        if slice < diaphragmSuperiorSlice:
+            fatVoidMask, abdominalMask, SCATSlice, VATSlice = \
+                segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask)
 
-        # TODO Seriously, it may be better to have 0->255 for the min/max intension. 0->1 isn't the greatest
+            fatVoidMasks[:, :, slice] = fatVoidMask
+            abdominalMasks[:, :, slice] = abdominalMask
+            SCAT[:, :, slice] = SCATSlice
+            VAT[:, :, slice] = VATSlice
+        else:
+            fatVoidMask, thoracicMask, lungMask, SCATSlice, ITATSlice, CATSlice = \
+                segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial, CATPosterior,
+                                     CATAnterior, CATInferior, CATSuperior)
 
-        # More testing here
-        # Fill holes in the fat image mask and invert it to get the background
-        # Fill in the background for fatImageMask and then invert intensity to make
-        # the holes inside of the object become the new object
-        # Remove small objects from holesImage by morphological opening
-        # Connect all objects from the resulting image by morphological closing
-        # Finally, fill holes in image to get the VAT mask
-        backgroundImage = sitk.InvertIntensity(sitk.BinaryFillhole(fatImageMask), 1)
-        holesImage = sitk.InvertIntensity(backgroundImage | fatImageMask, 1)
-        holesImage2 = sitk.BinaryMorphologicalOpening(holesImage, 3, sitk.sitkBall)
-        holesImage3 = sitk.RescaleIntensity(holesImage2, 0, 255)
-
-        # holesImage3 = sitk.BinaryMorphologicalClosing(holesImage2, 15, sitk.sitkBall)
-        # VATMask = sitk.BinaryFillhole(holesImage2)
-
-        numpyAr = sitk.GetArrayViewFromImage(holesImage3)
-        image, contours, hierarchy = cv2.findContours(numpyAr, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        combinedContours = np.vstack(contours)
-        hullContour = cv2.convexHull(combinedContours)
-
-        VATMask = np.zeros(numpyAr.shape, np.uint8)
-        VATMask = cv2.drawContours(VATMask, [hullContour], 0, 255, -1)
-
-        plt.imshow(VATMask)
-        plt.show()
-
-        # # Select contours 9->13, these can be seen in the figure below
-        # # Draw the contours onto contourImage to show what contours were found
-        # selectedContours = contours[9:13]
-        # contourImage = cv2.drawContours(cv2.cvtColor(binaryImage, cv2.COLOR_GRAY2BGR), selectedContours, -1,
-        #                                 (255, 0, 0), 3)
-
-        # For calculating convex hull, we want to combine the selected contour list into one numpy array of vertices
-
-        # Calculate the convex hull contour, which is a list of points for the convex hull
-
-        #
-        # # Draw the convex hull image on top of the contour image in green
-        # hullContourImage = cv2.drawContours(contourImage, [hullContour], 0, (0, 255, 0), 3)
-
-        # hull = cv2.convexHull(numpyAr.astype(int))
-        # img = np.zeros(numpyAr.shape, dtype=np.uint8)
-        # VATMask = cv2.fillConvexPoly(img, hull, 255)
-
-        VATMasks[slice] = holesImage3
-        # filledImages[slice] = filledImage
-
-        # # Testing with Geodesic Active Contour
-        # waterImageMask # FIll background and invert intensity
-        # gradientMagImage = sitk.GradientMagnitude(waterImageMask)
-        # sigGradientMagImage = sitk.Sigmoid(gradientMagImage, 1.0, 0.0, 255, 0)
-        # initialContour = sitk.CannyEdgeDetection(sitk.Cast(bodyMask, sitk.sitkFloat32), 0.0, 0.0, [0.0] * 3, [0.01] * 3)
-        # # initialContour = sitk.BinaryFillhole(initialContour)
-        # # initialContour = sitk.BinaryThinning(initialContour)
-        # finalContour = sitk.GeodesicActiveContourLevelSet(initialContour, sigGradientMagImage, 0.01, -1.0, 1.0, 1.0, 1000)
-        #
-        # gradientMagImages[slice] = gradientMagImage
-        # sigGradientMagImages[slice] = sigGradientMagImage
-        # initialContours[slice] = initialContour
-        # finalContours[slice] = finalContour
-
-        # # Method doesn't work the best...
-        # VATMask = sitk.BinaryMorphologicalClosing(waterImageMask, 6, sitk.sitkBall)
-        # VATMask = sitk.BinaryMorphologicalOpening(VATMask, 6, sitk.sitkBall)
-        # VATMasks[slice] = VATMask
+            fatVoidMasks[:, :, slice] = fatVoidMask
+            thoracicMasks[:, :, slice] = thoracicMask
+            lungMasks[:, :, slice] = lungMask
+            SCAT[:, :, slice] = SCATSlice
+            ITAT[:, :, slice] = ITATSlice
+            CAT[:, :, slice] = CATSlice
 
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
     if constants.debug:
-        sitk.WriteImage(sitk.JoinSeries(fatImageMasks), os.path.join(constants.pathDir, 'debug', 'fatImageMask.img'))
-        sitk.WriteImage(sitk.JoinSeries(waterImageMasks), os.path.join(constants.pathDir, 'debug',
-                                                                       'waterImageMask.img'))
-        sitk.WriteImage(sitk.JoinSeries(bodyMasks), os.path.join(constants.pathDir, 'debug',
-                                                                 'bodyMask.img'))
-        sitk.WriteImage(sitk.JoinSeries(VATMasks), os.path.join(constants.pathDir, 'debug',
-                                                                 'VATMask.img'))
+        np.save(getDebugPath('fatImageMask.npy'), fatImageMasks)
+        np.save(getDebugPath('waterImageMask.npy'), waterImageMasks)
+        np.save(getDebugPath('bodyMask.npy'), bodyMasks)
 
-        # sitk.WriteImage(sitk.JoinSeries(filledImages), os.path.join(constants.pathDir, 'debug',
-        #                                                          'filledImage.img'))
+        np.save(getDebugPath('fatVoidMask.npy'), fatVoidMasks)
+        np.save(getDebugPath('abdominalMask.npy'), abdominalMasks)
 
-        # sitk.WriteImage(sitk.JoinSeries(gradientMagImages), os.path.join(constants.pathDir, 'debug', 'gradientMagImage.img'))
-        # sitk.WriteImage(sitk.JoinSeries(sigGradientMagImages), os.path.join(constants.pathDir, 'debug', 'sigGradientMagImage.img'))
-        # sitk.WriteImage(sitk.JoinSeries(initialContours), os.path.join(constants.pathDir, 'debug', 'initialContour.img'))
-        # sitk.WriteImage(sitk.JoinSeries(finalContours), os.path.join(constants.pathDir, 'debug', 'finalContour.img'))
+        np.save(getDebugPath('lungMask.npy'), lungMasks)
+        np.save(getDebugPath('thoracicMask.npy'), thoracicMasks)
+
+    np.save(getDebugPath('SCAT.npy'), SCAT)
+    np.save(getDebugPath('VAT.npy'), VAT)
+    np.save(getDebugPath('ITAT.npy'), ITAT)
+    np.save(getDebugPath('CAT.npy'), CAT)

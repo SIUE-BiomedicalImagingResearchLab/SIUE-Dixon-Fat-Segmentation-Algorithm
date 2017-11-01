@@ -16,7 +16,7 @@ showBodyMask = False
 debug = True
 
 # Debug option to save intermediate steps for N4 bias correction in directory of the subject
-debugBiasCorrection = False
+debugBiasCorrection = True
 
 # Factor to shrink the volume by when applying the N4 ITK bias correction algorithm
 # Should be a number between 1-4
@@ -28,3 +28,11 @@ shrinkFactor = 4
 
 # Number of clusters for the K-means algorithm for segmenting images
 kMeanClusters = 2
+
+# Threshold area for the fat voids mask in abdominal region. This is used to remove objects smaller than this
+# threshold when determining the fat voids area.
+thresholdAbdominalFatVoidsArea = 30
+
+# Threshold area for the fat voids mask in thoracic region. This is used to remove objects smaller than this
+# threshold when determining the fat voids area.
+thresholdThoracicFatVoidsArea = 500
