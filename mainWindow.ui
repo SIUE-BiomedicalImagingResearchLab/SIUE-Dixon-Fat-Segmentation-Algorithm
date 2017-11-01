@@ -20,6 +20,13 @@
       <item row="5" column="0">
        <layout class="QVBoxLayout" name="verticalLayout">
         <item>
+         <widget class="QPushButton" name="configureButton">
+          <property name="text">
+           <string>Configure</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QPushButton" name="runButton">
           <property name="text">
            <string>Run Segmentation</string>

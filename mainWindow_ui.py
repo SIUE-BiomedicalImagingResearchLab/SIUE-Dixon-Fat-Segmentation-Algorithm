@@ -20,6 +20,9 @@ class Ui_MainWindow(object):
         self.gridLayout.setObjectName("gridLayout")
         self.verticalLayout = QtWidgets.QVBoxLayout()
         self.verticalLayout.setObjectName("verticalLayout")
+        self.configureButton = QtWidgets.QPushButton(self.centralwidget)
+        self.configureButton.setObjectName("configureButton")
+        self.verticalLayout.addWidget(self.configureButton)
         self.runButton = QtWidgets.QPushButton(self.centralwidget)
         self.runButton.setObjectName("runButton")
         self.verticalLayout.addWidget(self.runButton)
@@ -47,6 +50,7 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "SIUE Dixon Fat Segmentation Algorithm"))
+        self.configureButton.setText(_translate("MainWindow", "Configure"))
         self.runButton.setText(_translate("MainWindow", "Run Segmentation"))
         self.label.setText(_translate("MainWindow", "Source Folders:"))
         self.browseSourceButton.setText(_translate("MainWindow", "Browse"))

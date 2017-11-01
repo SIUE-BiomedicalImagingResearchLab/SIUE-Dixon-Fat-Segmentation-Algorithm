@@ -172,7 +172,7 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
 
 
 # Segment depots of adipose tissue given Dixon MRI images
-def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, config):
+def runSegmentation(fatImage, waterImage, config):
     # If debug is turned on, then create the directory where the debug files will be saved
     # The makedirs command is in try/catch because if it already exists, it will throw an exception and we just want
     # to continue in that case
@@ -185,14 +185,6 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     # Get the root of the config XML file
     configRoot = config.getroot()
 
-    # Piece together upper and lower images for fat and water
-    # Retrieve the inferior and superior axial slice from config file for upper and lower images
-    imageUpperTag = configRoot.find('imageUpper')
-    imageLowerTag = configRoot.find('imageLower')
-    imageUpperInferiorSlice = int(imageUpperTag.attrib['inferiorSlice'])
-    imageUpperSuperiorSlice = int(imageUpperTag.attrib['superiorSlice'])
-    imageLowerInferiorSlice = int(imageLowerTag.attrib['inferiorSlice'])
-    imageLowerSuperiorSlice = int(imageLowerTag.attrib['superiorSlice'])
     diaphragmSuperiorSlice = int(configRoot.find('diaphragm').attrib['superiorSlice'])
     umbilicisTag = configRoot.find('umbilicis')
     umbilicisInferiorSlice = int(umbilicisTag.attrib['inferiorSlice'])
@@ -230,21 +222,6 @@ def runSegmentation(niiFatUpper, niiFatLower, niiWaterUpper, niiWaterLower, conf
     CATAxial = CATAxial[CATAxialSortedInds]
     CATPosterior = CATPosterior[CATAxialSortedInds]
     CATAnterior = CATAnterior[CATAxialSortedInds]
-
-    # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
-    fatUpperImage = niiFatUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    fatLowerImage = niiFatLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
-    waterUpperImage = niiWaterUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    waterLowerImage = niiWaterLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
-
-    # Concatenate the lower and upper image into one along the Z dimension
-    # TODO Consider removing this and performing segmentation on upper/lower pieces separately
-    fatImage = np.concatenate((fatLowerImage, fatUpperImage), axis=2)
-    waterImage = np.concatenate((waterLowerImage, waterUpperImage), axis=2)
-
-    # Normalize the fat/water images so that the intensities are between (0.0, 1.0)
-    fatImage = (fatImage - fatImage.min()) / (fatImage.max() - fatImage.min())
-    waterImage = (waterImage - waterImage.min()) / (waterImage.max() - waterImage.min())
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
