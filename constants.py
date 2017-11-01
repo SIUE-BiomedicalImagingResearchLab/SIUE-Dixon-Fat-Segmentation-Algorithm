@@ -35,4 +35,4 @@ thresholdAbdominalFatVoidsArea = 30
 
 # Threshold area for the fat voids mask in thoracic region. This is used to remove objects smaller than this
 # threshold when determining the fat voids area.
-thresholdThoracicFatVoidsArea = 250
+thresholdThoracicFatVoidsArea = 500

@@ -257,7 +257,7 @@ def runSegmentation(fatImage, waterImage, config):
     ITAT = np.zeros(fatImage.shape, bool)
     CAT = np.zeros(fatImage.shape, bool)
 
-    for slice in range(diaphragmSuperiorSlice, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(0, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
