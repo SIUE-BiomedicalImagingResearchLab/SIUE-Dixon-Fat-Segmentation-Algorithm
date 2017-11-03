@@ -138,13 +138,17 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
         # Get centroid of each object. Left lung is on left side, so centroid should be below half of total coronal
         # plane size
         lungMaskLabels = skimage.morphology.label(lungMask)
-        lungProps = skimage.measure.regionprops(lungMaskLabels, cache=False)
-        if lungProps[0].centroid[0] <= fatImageMask.shape[0] // 2:
-            leftLung = (lungMaskLabels == 1)
-            rightLung = (lungMaskLabels == 2)
-        else:
-            leftLung = (lungMaskLabels == 2)
-            rightLung = (lungMaskLabels == 1)
+        lungProps = skimage.measure.regionprops(lungMaskLabels, cache=True)
+
+        # Sort lung objects based on area descending, first two largest objects are the left/right lung
+        sortedAreaIndices = sorted(range(len(lungProps)), key=lambda x: lungProps[x].area, reverse=True)
+
+        # Next, sort the two lungs based on their sagittal centroid coordinate
+        # Smaller sagittal centroid coordinate is the left lung, other is right lung
+        # Label ID is the regionprop index + 1
+        sortedCentroidIndices = sorted(sortedAreaIndices[0:2], key=lambda x: lungProps[x].centroid[0])
+        leftLung = (lungMaskLabels == sortedCentroidIndices[0] + 1)
+        rightLung = (lungMaskLabels == sortedCentroidIndices[1] + 1)
 
         # For the left and right lung, retrieve the outer contour index on a row-by-row basis.
         # Left lung will be lower index and right-lung will be upper index for ROI of CAT
@@ -257,7 +261,7 @@ def runSegmentation(fatImage, waterImage, config):
     ITAT = np.zeros(fatImage.shape, bool)
     CAT = np.zeros(fatImage.shape, bool)
 
-    for slice in range(0, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(175, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]
