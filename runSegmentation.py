@@ -67,6 +67,12 @@ def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
     SCAT = np.logical_and(np.logical_not(abdominalMask), fatImageMask)
     VAT = np.logical_and(abdominalMask, fatImageMask)
 
+    # Remove objects from SCAT where the area is less than given constant
+    SCAT = skimage.morphology.remove_small_objects(SCAT, constants.minSCATObjectArea)
+
+    # Remove objects from VAT where the area is less than given constant
+    VAT = skimage.morphology.remove_small_objects(VAT, constants.minVATObjectArea)
+
     return fatVoidMask, abdominalMask, SCAT, VAT
 
 
@@ -130,6 +136,9 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
     ITAT = np.logical_and(thoracicMask, fatImageMask)
     CAT = np.zeros_like(ITAT, dtype=bool)
 
+    # Remove objects from SCAT where the area is less than given constant
+    SCAT = skimage.morphology.remove_small_objects(SCAT, constants.minSCATObjectArea)
+
     if CATInferior <= slice <= CATSuperior:
         posterior = int(np.round(np.interp(slice, CATAxial, CATPosterior)))
         anterior = int(np.round(np.interp(slice, CATAxial, CATAnterior)))
@@ -171,6 +180,9 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
 
         # CAT is defined as ITAT inside the CATMask
         CAT[CATMask] = ITAT[CATMask]
+
+        # Remove objects from CAT where the area is less than given constant
+        CAT = skimage.morphology.remove_small_objects(CAT, constants.minCATObjectArea)
 
     return fatVoidMask, thoracicMask, lungMask, SCAT, ITAT, CAT
 
@@ -261,7 +273,7 @@ def runSegmentation(fatImage, waterImage, config):
     ITAT = np.zeros(fatImage.shape, bool)
     CAT = np.zeros(fatImage.shape, bool)
 
-    for slice in range(175, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    for slice in range(0, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[:, :, slice]

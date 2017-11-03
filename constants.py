@@ -36,3 +36,15 @@ thresholdAbdominalFatVoidsArea = 30
 # Threshold area for the fat voids mask in thoracic region. This is used to remove objects smaller than this
 # threshold when determining the fat voids area.
 thresholdThoracicFatVoidsArea = 500
+
+# Minimum area of CAT object
+# This is used as a threshold to remove small depots of pixels in the CAT
+minCATObjectArea = 5
+
+# Minimum area of SCAT object
+# This is used as a threshold to remove small depots of pixels in the SCAT
+minSCATObjectArea = 5
+
+# Minimum area of VAT object
+# This is used as a threshold to remove small depots of pixels in the VAT
+minVATObjectArea = 5
