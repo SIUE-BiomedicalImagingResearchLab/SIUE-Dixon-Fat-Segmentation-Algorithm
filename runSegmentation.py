@@ -2,6 +2,7 @@ import os
 import time
 
 import scipy.ndimage.morphology
+import scipy.io
 import skimage.draw
 import skimage.measure
 import skimage.morphology
@@ -168,7 +169,8 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
         # Any -1 values indicate there was no lung mask located there, so set it to the minimum index value
         leftIndices = leftIndices[posterior:anterior]
         rightIndices = rightIndices[posterior:anterior]
-        leftIndices[leftIndices == -1] = leftIndices[leftIndices != -1].min()
+
+        leftIndices[leftIndices == -1] = defaultmin(leftIndices[leftIndices != -1], 0)
         rightIndices[rightIndices == -1] = rightIndices.max()
 
         # Create CATMask which is a mask of where fat can be located around the heart
