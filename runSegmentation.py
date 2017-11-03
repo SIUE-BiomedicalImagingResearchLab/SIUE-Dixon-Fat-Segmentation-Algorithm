@@ -17,6 +17,10 @@ from utils import *
 def getDebugPath(path):
     return os.path.join(constants.pathDir, 'debug', path)
 
+# Get resulting path for files
+def getPath(path):
+    return os.path.join(constants.pathDir, path)
+
 
 # noinspection PyUnusedLocal
 def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
@@ -243,9 +247,9 @@ def runSegmentation(fatImage, waterImage, config):
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    if os.path.exists(getDebugPath('fatImage.npy')) and os.path.exists(getDebugPath('waterImage.npy')):
-        fatImage = np.load(getDebugPath('fatImage.npy'))
-        waterImage = np.load(getDebugPath('waterImage.npy'))
+    if os.path.exists(getPath('fatImageBC.npy')) and os.path.exists(getPath('waterImageBC.npy')):
+        fatImage = np.load(getPath('fatImageBC.npy'))
+        waterImage = np.load(getPath('waterImageBC.npy'))
     else:
         fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
                                prefix='fatImageBiasCorrection')
@@ -348,4 +352,4 @@ def runSegmentation(fatImage, waterImage, config):
     np.save(getDebugPath('CAT.npy'), CAT)
 
     if constants.saveMat:
-        scipy.io.savemat(getDebugPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})
+        scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})
