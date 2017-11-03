@@ -344,3 +344,6 @@ def runSegmentation(fatImage, waterImage, config):
     np.save(getDebugPath('VAT.npy'), VAT)
     np.save(getDebugPath('ITAT.npy'), ITAT)
     np.save(getDebugPath('CAT.npy'), CAT)
+
+    if constants.saveMat:
+        scipy.io.savemat(getDebugPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})

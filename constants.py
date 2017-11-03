@@ -48,3 +48,6 @@ minSCATObjectArea = 5
 # Minimum area of VAT object
 # This is used as a threshold to remove small depots of pixels in the VAT
 minVATObjectArea = 5
+
+# Boolean option to save final results in MATLAB .mat file
+saveMat = True
