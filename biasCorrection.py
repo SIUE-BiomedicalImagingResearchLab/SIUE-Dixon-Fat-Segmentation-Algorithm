@@ -5,6 +5,7 @@ import numpy as np
 import scipy.ndimage.interpolation
 import skimage.filters
 import skimage.transform
+import nrrd
 
 import constants
 
@@ -27,6 +28,8 @@ def correctBias(image, shrinkFactor, prefix):
 
     if constants.debugBiasCorrection:
         np.save(getDebugPath(prefix, 'image.npy'), image)
+
+        nrrd.write(getDebugPath(prefix, 'image.nrrd'), image, constants.nrrdHeaderDict)
 
     # Shrink image by shrinkFactor to make the bias correction quicker
     # Use resample to linearly interpolate between pixel values

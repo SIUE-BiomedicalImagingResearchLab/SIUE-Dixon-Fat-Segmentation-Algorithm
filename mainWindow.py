@@ -118,8 +118,6 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
             return
 
         # Get selected index text
-        dataPath = self.sourceModel.itemFromIndex(selectedIndices[0]).text()
-
         dataPath = selectedIndices[0].data()
 
         # Load data from path
@@ -181,5 +179,17 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         # Normalize the fat/water images so that the intensities are between (0.0, 1.0)
         fatImage = (fatImage - fatImage.min()) / (fatImage.max() - fatImage.min())
         waterImage = (waterImage - waterImage.min()) / (waterImage.max() - waterImage.min())
+
+        # Set constant pathDir to be the current data path to allow writing/reading from the current directory
+        constants.pathDir = dataPath
+
+        constants.nrrdHeaderDict = {'space': 'right-anterior-superior'}
+        constants.nrrdHeaderDict['space directions'] = (niiFatUpper.header['srow_x'][0:-1],
+                                                        niiFatUpper.header['srow_y'][0:-1],
+                                                        niiFatUpper.header['srow_z'][0:-1])
+
+        constants.nrrdHeaderDict['space origin'] = (niiFatUpper.header['srow_x'][-1],
+                                                    niiFatUpper.header['srow_y'][-1],
+                                                    niiFatUpper.header['srow_z'][-1])
 
         return fatImage, waterImage, config

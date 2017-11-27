@@ -260,8 +260,8 @@ def runSegmentation(fatImage, waterImage, config):
 
     # Print out the fat and water image after bias correction
     if constants.debug:
-        np.save(getDebugPath('fatImage.npy'), fatImage)
-        np.save(getDebugPath('waterImage.npy'), waterImage)
+        np.save(getDebugPath('fatImageBC.npy'), fatImage)
+        np.save(getDebugPath('waterImageBC.npy'), waterImage)
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards

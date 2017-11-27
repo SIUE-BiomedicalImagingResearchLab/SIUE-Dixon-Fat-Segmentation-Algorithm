@@ -51,3 +51,7 @@ minVATObjectArea = 5
 
 # Boolean option to save final results in MATLAB .mat file
 saveMat = True
+
+# Constant variables that are set in another function
+pathDir = None
+nrrdHeaderDict = None
