@@ -7,6 +7,7 @@ import skimage.draw
 import skimage.measure
 import skimage.morphology
 import skimage.segmentation
+import nrrd
 
 import constants
 from biasCorrection import correctBias
@@ -247,21 +248,21 @@ def runSegmentation(fatImage, waterImage, config):
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    if os.path.exists(getPath('fatImageBC.npy')) and os.path.exists(getPath('waterImageBC.npy')):
-        fatImage = np.load(getPath('fatImageBC.npy'))
-        waterImage = np.load(getPath('waterImageBC.npy'))
+    if os.path.exists(getPath('fatImageBC.nrrd')) and os.path.exists(getPath('waterImageBC.nrrd')):
+        fatImage, header = nrrd.read(getPath('fatImageBC.nrrd'))
+        waterImage, header = nrrd.read(getPath('waterImageBC.nrrd'))
     else:
         fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
                                prefix='fatImageBiasCorrection')
         waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor,
                                  prefix='waterImageBiasCorrection')
+
+        # If bias correction is performed, saved images to speed up algorithm in future runs
+        nrrd.write(getDebugPath('fatImageBC.nrrd'), fatImage, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('waterImageBC.nrrd'), waterImage, constants.nrrdHeaderDict)
+
     toc = time.perf_counter()
     print('N4ITK bias field correction took %f seconds' % (toc - tic))
-
-    # Print out the fat and water image after bias correction
-    if constants.debug:
-        np.save(getDebugPath('fatImageBC.npy'), fatImage)
-        np.save(getDebugPath('waterImageBC.npy'), waterImage)
 
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
