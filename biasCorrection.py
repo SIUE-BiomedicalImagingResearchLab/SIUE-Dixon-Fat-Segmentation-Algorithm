@@ -27,8 +27,6 @@ def correctBias(image, shrinkFactor, prefix):
             pass
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'image.npy'), image)
-
         nrrd.write(getDebugPath(prefix, 'image.nrrd'), image, constants.nrrdHeaderDict)
 
     # Shrink image by shrinkFactor to make the bias correction quicker
@@ -36,7 +34,7 @@ def correctBias(image, shrinkFactor, prefix):
     shrinkedImage = scipy.ndimage.interpolation.zoom(image, 1 / shrinkFactor)
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'imageShrinked.npy'), shrinkedImage)
+        nrrd.write(getDebugPath(prefix, 'imageShrinked.nrrd'), shrinkedImage, constants.nrrdHeaderDict)
 
     # Perform Otsu's thresholding method on images to get a mask for N4 correction bias
     # According to Sled's paper (author of N3 bias correction), the mask is to remove infinity values
@@ -45,7 +43,7 @@ def correctBias(image, shrinkFactor, prefix):
     imageMask = (shrinkedImage >= imageMaskThresh).astype(np.uint8)
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'imageMask.npy'), imageMask)
+        nrrd.write(getDebugPath(prefix, 'imageMask.nrrd'), imageMask, constants.nrrdHeaderDict)
 
     # Apply N4 bias field correction to the shrinked image
     shrinkedImageITK = sitk.GetImageFromArray(shrinkedImage)
@@ -54,7 +52,7 @@ def correctBias(image, shrinkFactor, prefix):
     correctedImage = sitk.GetArrayFromImage(correctedImageITK)
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'correctedImageShrinked.npy'), correctedImage)
+        nrrd.write(getDebugPath(prefix, 'correctedImageShrinked.nrrd'), correctedImage, constants.nrrdHeaderDict)
 
     # Replace all 0s in shrinked image with very small number
     # Prevents infinity values when calculating shrinked bias field, prevents divide by zero issues
@@ -65,7 +63,7 @@ def correctBias(image, shrinkFactor, prefix):
     biasFieldShrinked = shrinkedImage / correctedImage
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'biasFieldShrinked.npy'), biasFieldShrinked)
+        nrrd.write(getDebugPath(prefix, 'biasFieldShrinked.nrrd'), biasFieldShrinked, constants.nrrdHeaderDict)
 
     # TODO This causes the first and last slice of the biasField to be all 0s
     # Since the image was shrinked when performing bias correction to speed up the process, the bias field is
@@ -78,13 +76,13 @@ def correctBias(image, shrinkFactor, prefix):
     biasField[biasField == 0] = 1
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'biasField.npy'), biasField)
+        nrrd.write(getDebugPath(prefix, 'biasField.nrrd'), biasField, constants.nrrdHeaderDict)
 
     # Get the actual image by dividing original image by the bias field
     # u(x) = v(x) / f(x)
     correctedImage = image / biasField
 
     if constants.debugBiasCorrection:
-        np.save(getDebugPath(prefix, 'correctedImage.npy'), biasField)
+        nrrd.write(getDebugPath(prefix, 'correctedImage.nrrd'), correctedImage, constants.nrrdHeaderDict)
 
     return correctedImage
