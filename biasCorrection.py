@@ -33,10 +33,13 @@ def correctBias(image, shrinkFactor, prefix):
     # Use resample to linearly interpolate between pixel values
     shrinkedImage = scipy.ndimage.interpolation.zoom(image, 1 / shrinkFactor)
 
+    # Since the image is shrinked, this means the spacing between pixels increased by the shrink factor
+    # Adjust this in the NRRD header
+    nrrdHeaderDictShrinked = constants.nrrdHeaderDict
+    nrrdHeaderDictShrinked['space directions'] = (x * shrinkFactor for x in nrrdHeaderDictShrinked['space directions'])
+
     if constants.debugBiasCorrection:
-        nrrdHeaderDict = constants.nrrdHeaderDict
-        nrrdHeaderDict['space directions'] = (x * shrinkFactor for x in nrrdHeaderDict['space directions'])
-        nrrd.write(getDebugPath(prefix, 'imageShrinked.nrrd'), shrinkedImage, nrrdHeaderDict)
+        nrrd.write(getDebugPath(prefix, 'imageShrinked.nrrd'), shrinkedImage, nrrdHeaderDictShrinked)
 
     # Perform Otsu's thresholding method on images to get a mask for N4 correction bias
     # According to Sled's paper (author of N3 bias correction), the mask is to remove infinity values
@@ -45,7 +48,7 @@ def correctBias(image, shrinkFactor, prefix):
     imageMask = (shrinkedImage >= imageMaskThresh).astype(np.uint8)
 
     if constants.debugBiasCorrection:
-        nrrd.write(getDebugPath(prefix, 'imageMask.nrrd'), imageMask, nrrdHeaderDict)
+        nrrd.write(getDebugPath(prefix, 'imageMask.nrrd'), imageMask, nrrdHeaderDictShrinked)
 
     # Apply N4 bias field correction to the shrinked image
     shrinkedImageITK = sitk.GetImageFromArray(shrinkedImage)
@@ -54,7 +57,7 @@ def correctBias(image, shrinkFactor, prefix):
     correctedImage = sitk.GetArrayFromImage(correctedImageITK)
 
     if constants.debugBiasCorrection:
-        nrrd.write(getDebugPath(prefix, 'correctedImageShrinked.nrrd'), correctedImage, nrrdHeaderDict)
+        nrrd.write(getDebugPath(prefix, 'correctedImageShrinked.nrrd'), correctedImage, nrrdHeaderDictShrinked)
 
     # Replace all 0s in shrinked image with very small number
     # Prevents infinity values when calculating shrinked bias field, prevents divide by zero issues
@@ -65,7 +68,7 @@ def correctBias(image, shrinkFactor, prefix):
     biasFieldShrinked = shrinkedImage / correctedImage
 
     if constants.debugBiasCorrection:
-        nrrd.write(getDebugPath(prefix, 'biasFieldShrinked.nrrd'), biasFieldShrinked, nrrdHeaderDict)
+        nrrd.write(getDebugPath(prefix, 'biasFieldShrinked.nrrd'), biasFieldShrinked, nrrdHeaderDictShrinked)
 
     # TODO This causes the first and last slice of the biasField to be all 0s
     # Since the image was shrinked when performing bias correction to speed up the process, the bias field is
