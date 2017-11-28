@@ -347,10 +347,10 @@ def runSegmentation(fatImage, waterImage, config):
         nrrd.write(getDebugPath('lungMask.nrrd'), skimage.img_as_ubyte(lungMasks), constants.nrrdHeaderDict)
         nrrd.write(getDebugPath('thoracicMask.nrrd'), skimage.img_as_ubyte(thoracicMasks), constants.nrrdHeaderDict)
 
-    nrrd.write(getDebugPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict)
-    nrrd.write(getDebugPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict)
-    nrrd.write(getDebugPath('ITAT.nrrd'), skimage.img_as_ubyte(ITAT), constants.nrrdHeaderDict)
-    nrrd.write(getDebugPath('CAT.nrrd'), skimage.img_as_ubyte(CAT), constants.nrrdHeaderDict)
+    nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict)
+    nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict)
+    nrrd.write(getPath('ITAT.nrrd'), skimage.img_as_ubyte(ITAT), constants.nrrdHeaderDict)
+    nrrd.write(getPath('CAT.nrrd'), skimage.img_as_ubyte(CAT), constants.nrrdHeaderDict)
 
     if constants.saveMat:
         scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})
