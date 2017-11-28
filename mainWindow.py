@@ -8,6 +8,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from lxml import etree
 from configureWindow import ConfigureWindow
+import skimage.exposure
 
 import constants
 import mainWindow_ui
@@ -177,8 +178,9 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         waterImage = np.concatenate((waterLowerImage, waterUpperImage), axis=2)
 
         # Normalize the fat/water images so that the intensities are between (0.0, 1.0)
-        fatImage = (fatImage - fatImage.min()) / (fatImage.max() - fatImage.min())
-        waterImage = (waterImage - waterImage.min()) / (waterImage.max() - waterImage.min())
+        # Also converts to float data type
+        fatImage = skimage.img_as_float(fatImage)
+        waterImage = skimage.img_as_float(waterImage)
 
         # Set constant pathDir to be the current data path to allow writing/reading from the current directory
         constants.pathDir = dataPath

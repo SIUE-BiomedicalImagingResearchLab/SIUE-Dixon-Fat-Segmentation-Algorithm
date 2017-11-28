@@ -6,6 +6,7 @@ import numpy as np
 import scipy.ndimage.interpolation
 import skimage.filters
 import skimage.transform
+import skimage.exposure
 
 import constants
 
@@ -88,9 +89,8 @@ def correctBias(image, shrinkFactor, prefix):
     # u(x) = v(x) / f(x)
     correctedImage = image / biasField
 
-    print('Min/Max: %i %i' % (image.min(), image.max()))
-    print('Min/Max: %i %i' % (biasField.min(), biasField.max()))
-    print('Min/Max: %i %i' % (correctedImage.min(), correctedImage.max()))
+    # Rescale corrected image so it is within bounds [0, 1]
+    correctedImage = skimage.exposure.rescale_intensity(correctedImage)
 
     if constants.debugBiasCorrection:
         nrrd.write(getDebugPath(prefix, 'correctedImage.nrrd'), correctedImage, constants.nrrdHeaderDict)
