@@ -62,7 +62,7 @@ def correctBias(image, shrinkFactor, prefix):
 
     # Replace all 0s in shrinked image with very small number
     # Prevents infinity values when calculating shrinked bias field, prevents divide by zero issues
-    correctedImage[correctedImage == 0] = 0.001
+    correctedImage[correctedImage < 1e-2] = 0.01
 
     # Get the bias field by dividing measured image by corrected image
     # v(x) / u(x) = f(x)
@@ -79,7 +79,7 @@ def correctBias(image, shrinkFactor, prefix):
     # Replace all 0s in shrinked image with 1s
     # Prevents infinity values when calculating corrected image, by setting the bias field to 1 at
     # that index, it will set the corrected image pixel equal to the original image pixel value
-    biasField[biasField == 0] = 1
+    biasField[biasField < 1e-3] = 1
 
     if constants.debugBiasCorrection:
         nrrd.write(getDebugPath(prefix, 'biasField.nrrd'), biasField, constants.nrrdHeaderDict)
@@ -87,6 +87,10 @@ def correctBias(image, shrinkFactor, prefix):
     # Get the actual image by dividing original image by the bias field
     # u(x) = v(x) / f(x)
     correctedImage = image / biasField
+
+    print('Min/Max: %i %i' % (image.min(), image.max()))
+    print('Min/Max: %i %i' % (biasField.min(), biasField.max()))
+    print('Min/Max: %i %i' % (correctedImage.min(), correctedImage.max()))
 
     if constants.debugBiasCorrection:
         nrrd.write(getDebugPath(prefix, 'correctedImage.nrrd'), correctedImage, constants.nrrdHeaderDict)

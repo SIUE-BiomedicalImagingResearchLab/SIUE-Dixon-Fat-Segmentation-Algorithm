@@ -337,20 +337,20 @@ def runSegmentation(fatImage, waterImage, config):
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
     if constants.debug:
-        nrrd.write(getDebugPath('fatImageMask.nrrd'), fatImageMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('waterImageMask.nrrd'), waterImageMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('bodyMask.nrrd'), bodyMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks), constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks), constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks), constants.nrrdHeaderDict)
 
-        nrrd.write(getDebugPath('fatVoidMask.nrrd'), fatVoidMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('abdominalMask.nrrd'), abdominalMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks), constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks), constants.nrrdHeaderDict)
 
-        nrrd.write(getDebugPath('lungMask.nrrd'), lungMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('thoracicMask.nrrd'), thoracicMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('lungMask.nrrd'), skimage.img_as_ubyte(lungMasks), constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('thoracicMask.nrrd'), skimage.img_as_ubyte(thoracicMasks), constants.nrrdHeaderDict)
 
-    nrrd.write(getDebugPath('SCAT.nrrd'), SCAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-    nrrd.write(getDebugPath('VAT.nrrd'), VAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-    nrrd.write(getDebugPath('ITAT.nrrd'), ITAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
-    nrrd.write(getDebugPath('CAT.nrrd'), CAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('ITAT.nrrd'), skimage.img_as_ubyte(ITAT), constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('CAT.nrrd'), skimage.img_as_ubyte(CAT), constants.nrrdHeaderDict)
 
     if constants.saveMat:
         scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})
