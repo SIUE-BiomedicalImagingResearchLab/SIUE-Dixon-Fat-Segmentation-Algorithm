@@ -63,7 +63,7 @@ def correctBias(image, shrinkFactor, prefix):
 
     # Replace all 0s in shrinked image with very small number
     # Prevents infinity values when calculating shrinked bias field, prevents divide by zero issues
-    correctedImage[correctedImage < 1e-2] = 0.01
+    correctedImage[correctedImage == 0] = 0.001
 
     # Get the bias field by dividing measured image by corrected image
     # v(x) / u(x) = f(x)
@@ -77,10 +77,9 @@ def correctBias(image, shrinkFactor, prefix):
     # now expanded to the original image size
     biasField = scipy.ndimage.interpolation.zoom(biasFieldShrinked, np.array(image.shape) / biasFieldShrinked.shape)
 
-    # Replace all 0s in shrinked image with 1s
-    # Prevents infinity values when calculating corrected image, by setting the bias field to 1 at
-    # that index, it will set the corrected image pixel equal to the original image pixel value
-    biasField[biasField < 1e-3] = 1
+    # Clip all values below 0.50 to 0.50. We know the biasField should not be changing items by more than a factor
+    # of two
+    biasField[biasField < 0.50] = 0.50
 
     if constants.debugBiasCorrection:
         nrrd.write(getDebugPath(prefix, 'biasField.nrrd'), biasField, constants.nrrdHeaderDict)
@@ -89,8 +88,8 @@ def correctBias(image, shrinkFactor, prefix):
     # u(x) = v(x) / f(x)
     correctedImage = image / biasField
 
-    # Rescale corrected image so it is within bounds [0, 1]
-    correctedImage = skimage.exposure.rescale_intensity(correctedImage)
+    # # Rescale corrected image so it is within bounds [0, 1]
+    correctedImage = skimage.exposure.rescale_intensity(correctedImage, out_range=(0, 1))
 
     if constants.debugBiasCorrection:
         nrrd.write(getDebugPath(prefix, 'correctedImage.nrrd'), correctedImage, constants.nrrdHeaderDict)

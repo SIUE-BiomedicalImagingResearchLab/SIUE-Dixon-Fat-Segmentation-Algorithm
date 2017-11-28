@@ -143,8 +143,6 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
             print('Missing required files from source path folder. Continuing...')
             return None, None, None
 
-        # TODO Check for forceSegmentation
-
         # Load unrectified NIFTI files for the current dataPath
         niiFatUpper = nib.load(niiFatUpperFilename)
         niiFatLower = nib.load(niiFatLowerFilename)
@@ -179,8 +177,8 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
         # Normalize the fat/water images so that the intensities are between (0.0, 1.0)
         # Also converts to float data type
-        fatImage = skimage.img_as_float(fatImage)
-        waterImage = skimage.img_as_float(waterImage)
+        fatImage = skimage.exposure.rescale_intensity(fatImage.astype(float), out_range=(0.0, 1.0))
+        waterImage = skimage.exposure.rescale_intensity(waterImage.astype(float), out_range=(0.0, 1.0))
 
         # Set constant pathDir to be the current data path to allow writing/reading from the current directory
         constants.pathDir = dataPath
