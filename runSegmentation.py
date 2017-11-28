@@ -196,14 +196,14 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
 
 # Segment depots of adipose tissue given Dixon MRI images
 def runSegmentation(fatImage, waterImage, config):
-    # If debug is turned on, then create the directory where the debug files will be saved
+    # Create debug directory regardless of whether debug constant is true
+    # The bias corrected fat and water images are going to be created in this directory regardless of debug constant
     # The makedirs command is in try/catch because if it already exists, it will throw an exception and we just want
     # to continue in that case
-    if constants.debug:
-        try:
-            os.makedirs(getDebugPath(''))
-        except FileExistsError:
-            pass
+    try:
+        os.makedirs(getDebugPath(''))
+    except FileExistsError:
+        pass
 
     # Get the root of the config XML file
     configRoot = config.getroot()
@@ -248,9 +248,9 @@ def runSegmentation(fatImage, waterImage, config):
 
     # Perform bias correction on MRI images to remove inhomogeneity
     tic = time.perf_counter()
-    if os.path.exists(getPath('fatImageBC.nrrd')) and os.path.exists(getPath('waterImageBC.nrrd')):
-        fatImage, header = nrrd.read(getPath('fatImageBC.nrrd'))
-        waterImage, header = nrrd.read(getPath('waterImageBC.nrrd'))
+    if os.path.exists(getDebugPath('fatImageBC.nrrd')) and os.path.exists(getDebugPath('waterImageBC.nrrd')):
+        fatImage, header = nrrd.read(getDebugPath('fatImageBC.nrrd'))
+        waterImage, header = nrrd.read(getDebugPath('waterImageBC.nrrd'))
     else:
         fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
                                prefix='fatImageBiasCorrection')
@@ -337,20 +337,20 @@ def runSegmentation(fatImage, waterImage, config):
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
     if constants.debug:
-        np.save(getDebugPath('fatImageMask.npy'), fatImageMasks)
-        np.save(getDebugPath('waterImageMask.npy'), waterImageMasks)
-        np.save(getDebugPath('bodyMask.npy'), bodyMasks)
+        nrrd.write(getDebugPath('fatImageMask.nrrd'), fatImageMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('waterImageMask.nrrd'), waterImageMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('bodyMask.nrrd'), bodyMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
 
-        np.save(getDebugPath('fatVoidMask.npy'), fatVoidMasks)
-        np.save(getDebugPath('abdominalMask.npy'), abdominalMasks)
+        nrrd.write(getDebugPath('fatVoidMask.nrrd'), fatVoidMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('abdominalMask.nrrd'), abdominalMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
 
-        np.save(getDebugPath('lungMask.npy'), lungMasks)
-        np.save(getDebugPath('thoracicMask.npy'), thoracicMasks)
+        nrrd.write(getDebugPath('lungMask.nrrd'), lungMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+        nrrd.write(getDebugPath('thoracicMask.nrrd'), thoracicMasks.astype(np.uint8) * 255, constants.nrrdHeaderDict)
 
-    np.save(getDebugPath('SCAT.npy'), SCAT)
-    np.save(getDebugPath('VAT.npy'), VAT)
-    np.save(getDebugPath('ITAT.npy'), ITAT)
-    np.save(getDebugPath('CAT.npy'), CAT)
+    nrrd.write(getDebugPath('SCAT.nrrd'), SCAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('VAT.nrrd'), VAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('ITAT.nrrd'), ITAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
+    nrrd.write(getDebugPath('CAT.nrrd'), CAT.astype(np.uint8) * 255, constants.nrrdHeaderDict)
 
     if constants.saveMat:
         scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})

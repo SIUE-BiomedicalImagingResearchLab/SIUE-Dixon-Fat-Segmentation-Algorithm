@@ -1,11 +1,11 @@
 import os
 
 import SimpleITK as sitk
+import nrrd
 import numpy as np
 import scipy.ndimage.interpolation
 import skimage.filters
 import skimage.transform
-import nrrd
 
 import constants
 
@@ -35,8 +35,9 @@ def correctBias(image, shrinkFactor, prefix):
 
     # Since the image is shrinked, this means the spacing between pixels increased by the shrink factor
     # Adjust this in the NRRD header
-    nrrdHeaderDictShrinked = constants.nrrdHeaderDict
-    nrrdHeaderDictShrinked['space directions'] = (x * shrinkFactor for x in nrrdHeaderDictShrinked['space directions'])
+    nrrdHeaderDictShrinked = constants.nrrdHeaderDict.copy()
+    nrrdHeaderDictShrinked['space directions'] = list(
+        x * shrinkFactor for x in nrrdHeaderDictShrinked['space directions'])
 
     if constants.debugBiasCorrection:
         nrrd.write(getDebugPath(prefix, 'imageShrinked.nrrd'), shrinkedImage, nrrdHeaderDictShrinked)
