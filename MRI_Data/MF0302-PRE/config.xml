@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<config SchemaVersion="1">
+    <diaphragm superiorSlice="27"/>
+    <umbilicis coronal="12" inferiorSlice="4" left="109" right="137" superiorSlice="6" />
+</config>

@@ -8,6 +8,7 @@ import skimage.measure
 import skimage.morphology
 import skimage.segmentation
 import nrrd
+import matplotlib.pyplot as plt
 
 import constants
 from biasCorrection import correctBias
@@ -195,7 +196,7 @@ def segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial
 
 
 # Segment depots of adipose tissue given Dixon MRI images
-def runSegmentation(fatImage, waterImage, config):
+def runSegmentation(image, config):
     # Create debug directory regardless of whether debug constant is true
     # The bias corrected fat and water images are going to be created in this directory regardless of debug constant
     # The makedirs command is in try/catch because if it already exists, it will throw an exception and we just want
@@ -205,9 +206,9 @@ def runSegmentation(fatImage, waterImage, config):
     except FileExistsError:
         pass
 
-    # Get the root of the config XML file
+    # # Get the root of the config XML file
     configRoot = config.getroot()
-
+    #
     diaphragmSuperiorSlice = int(configRoot.find('diaphragm').attrib['superiorSlice'])
     umbilicisTag = configRoot.find('umbilicis')
     umbilicisInferiorSlice = int(umbilicisTag.attrib['inferiorSlice'])
@@ -216,141 +217,144 @@ def runSegmentation(fatImage, waterImage, config):
     umbilicisRight = int(umbilicisTag.attrib['right'])
     umbilicisCoronal = int(umbilicisTag.attrib['coronal'])
 
-    # Load cardiac adipose tissue (CAT) tag and corresponding lines in axial plane
-    CATTag = configRoot.find('CAT')
-    CATAxial = []
-    CATPosterior = []
-    CATAnterior = []
-    # Foreach line in the CAT tag, append to the three arrays
-    for line in CATTag:
-        if line.tag != 'line':
-            print('Invalid tag for CAT, must be line')
-            continue
+    print(diaphragmSuperiorSlice)
+    print(umbilicisInferiorSlice)
+    print(umbilicisSuperiorSlice)
+    print(umbilicisLeft)
+    print(umbilicisRight)
+    print(umbilicisCoronal)
 
-        CATAxial.append(int(line.attrib['axial']))
-        CATPosterior.append(int(line.attrib['posterior']))
-        CATAnterior.append(int(line.attrib['anterior']))
-
-    # Convert three arrays to NumPy and get minimum/maximum axial slice
-    # The min/max axial slice is used to determine the start and stopping point
-    # of calculating CAT
-    CATAxial = np.array(CATAxial)
-    CATPosterior = np.array(CATPosterior)
-    CATAnterior = np.array(CATAnterior)
-    CATInferior = CATAxial.min()
-    CATSuperior = CATAxial.max()
-
-    # Sort the three arrays based on CAT axial, ascending
-    CATAxialSortedInds = CATAxial.argsort()
-    CATAxial = CATAxial[CATAxialSortedInds]
-    CATPosterior = CATPosterior[CATAxialSortedInds]
-    CATAnterior = CATAnterior[CATAxialSortedInds]
-
+    #
+    # # Load cardiac adipose tissue (CAT) tag and corresponding lines in axial plane
+    # CATTag = configRoot.find('CAT')
+    # CATAxial = []
+    # CATPosterior = []
+    # CATAnterior = []
+    # # Foreach line in the CAT tag, append to the three arrays
+    # for line in CATTag:
+    #     if line.tag != 'line':
+    #         print('Invalid tag for CAT, must be line')
+    #         continue
+    #
+    #     CATAxial.append(int(line.attrib['axial']))
+    #     CATPosterior.append(int(line.attrib['posterior']))
+    #     CATAnterior.append(int(line.attrib['anterior']))
+    #
+    #
+    # # # Convert three arrays to NumPy and get minimum/maximum axial slice
+    # # # The min/max axial slice is used to determine the start and stopping point
+    # # # of calculating CAT
+    # CATAxial = np.array(CATAxial)
+    # CATPosterior = np.array(CATPosterior)
+    # CATAnterior = np.array(CATAnterior)
+    # CATInferior = CATAxial.min()
+    # CATSuperior = CATAxial.max()
+    # #
+    # # # Sort the three arrays based on CAT axial, ascending
+    # CATAxialSortedInds = CATAxial.argsort()
+    # CATAxial = CATAxial[CATAxialSortedInds]
+    # CATPosterior = CATPosterior[CATAxialSortedInds]
+    # CATAnterior = CATAnterior[CATAxialSortedInds]
+    #
     # Perform bias correction on MRI images to remove inhomogeneity
-    tic = time.perf_counter()
-    if os.path.exists(getDebugPath('fatImageBC.nrrd')) and os.path.exists(getDebugPath('waterImageBC.nrrd')):
-        fatImage, header = nrrd.read(getDebugPath('fatImageBC.nrrd'))
-        waterImage, header = nrrd.read(getDebugPath('waterImageBC.nrrd'))
-    else:
-        fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor,
-                               prefix='fatImageBiasCorrection')
-        waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor,
-                                 prefix='waterImageBiasCorrection')
-
-        # If bias correction is performed, saved images to speed up algorithm in future runs
-        nrrd.write(getDebugPath('fatImageBC.nrrd'), fatImage, constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('waterImageBC.nrrd'), waterImage, constants.nrrdHeaderDict)
-
-    toc = time.perf_counter()
-    print('N4ITK bias field correction took %f seconds' % (toc - tic))
-
+    # tic = time.perf_counter()
+    # if os.path.exists(getDebugPath('MRI_Data_Nrrd_Output/t1_fl2d_tra_p3_256_BC.nrrd')):
+    #     fatAndWaterImage, header = nrrd.read(getDebugPath('MRI_Data_Nrrd_Output/t1_fl2d_tra_p3_256.nrrd'))
+    # else:
+    #     fatAndWaterImage = correctBias(fatAndWaterImage, shrinkFactor=constants.shrinkFactor,
+    #                            prefix='fatImageBiasCorrection')
+    #
+    #     # If bias correction is performed, saved images to speed up algorithm in future runs
+    #     nrrd.write(getDebugPath('MRI_Data_Nrrd_Output/t1_fl2d_tra_p3_256_BC.nrrd'), fatAndWaterImage, constants.nrrdHeaderDict)
+    #
+    # toc = time.perf_counter()
+    # print('N4ITK bias field correction took %f seconds' % (toc - tic))
+    #
     # Create empty arrays that will contain slice-by-slice intermediate images when processing the images
     # These are used to print the entire 3D volume out for debugging afterwards
+    fatImage, header = nrrd.read(getDebugPath("C:/Users/Clint/PycharmProjects/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data_Nrrd_Output/newOut.nrrd"))
     fatImageMasks = np.zeros(fatImage.shape, bool)
-    waterImageMasks = np.zeros(fatImage.shape, bool)
-    bodyMasks = np.zeros(fatImage.shape, bool)
-    fatVoidMasks = np.zeros(fatImage.shape, bool)
-    abdominalMasks = np.zeros(fatImage.shape, bool)
-    thoracicMasks = np.zeros(fatImage.shape, bool)
-    lungMasks = np.zeros(fatImage.shape, bool)
 
     # Final 3D volume results
     SCAT = np.zeros(fatImage.shape, bool)
     VAT = np.zeros(fatImage.shape, bool)
     ITAT = np.zeros(fatImage.shape, bool)
     CAT = np.zeros(fatImage.shape, bool)
-
-    for slice in range(0, fatImage.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
+    #
+    for slice in range(0, image.shape[2]):  # 0, diaphragmSuperiorSlice): # fatImage.shape[2]):
         tic = time.perf_counter()
 
-        fatImageSlice = fatImage[:, :, slice]
-        waterImageSlice = waterImage[:, :, slice]
+        imageSlice = image[:, :, slice]
+        # waterImageSlice = waterImage[:, :, slice]
 
         # Segment fat/water images using K-means
         # labelOrder contains the labels sorted from smallest intensity to greatest
         # Since our k = 2, we want the higher intensity label at index 1
-        labelOrder, centroids, fatImageLabels = kmeans(fatImageSlice, constants.kMeanClusters)
-        fatImageMask = (fatImageLabels == labelOrder[1])
-        labelOrder, centroids, waterImageLabels = kmeans(waterImageSlice, constants.kMeanClusters)
-        waterImageMask = (waterImageLabels == labelOrder[1])
+        labelOrder, centroids, imageLabels = kmeans(imageSlice, 2)
+        fatImageMask = (imageLabels == labelOrder[1])
+        #plt.figure()
+        #plt.imshow(imageLabels*127, cmap="gray")
+        #plt.show()
 
-        # Algorithm assumes that the skin is a closed contour and fully connects
-        # This is a valid assumption but near the umbilicis, there is a discontinuity
-        # so this draws a line near there to create a closed contour
+
+
+        # # Algorithm assumes that the skin is a closed contour and fully connects
+        # # This is a valid assumption but near the umbilicis, there is a discontinuity
+        # # so this draws a line near there to create a closed contour
         if umbilicisInferiorSlice <= slice <= umbilicisSuperiorSlice:
             fatImageMask[umbilicisLeft:umbilicisRight, umbilicisCoronal] = True
-
+        #
         fatImageMasks[:, :, slice] = fatImageMask
-        waterImageMasks[:, :, slice] = waterImageMask
-
-        # Get body mask by combining fat and water masks
-        # Apply some closing to the image mask to connect any small gaps (such as at umbilical cord)
-        # Fill all holes which will create a solid body mask
-        # Remove small objects that are artifacts from segmentation
-        bodyMask = np.logical_or(fatImageMask, waterImageMask)
-        bodyMask = skimage.morphology.binary_closing(bodyMask, skimage.morphology.disk(3))
-        bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
-        bodyMasks[:, :, slice] = bodyMask
-
-        # Superior of diaphragm is divider between thoracic and abdominal region
-        if slice < diaphragmSuperiorSlice:
-            fatVoidMask, abdominalMask, SCATSlice, VATSlice = \
-                segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask)
-
-            fatVoidMasks[:, :, slice] = fatVoidMask
-            abdominalMasks[:, :, slice] = abdominalMask
-            SCAT[:, :, slice] = SCATSlice
-            VAT[:, :, slice] = VATSlice
-        else:
-            fatVoidMask, thoracicMask, lungMask, SCATSlice, ITATSlice, CATSlice = \
-                segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial, CATPosterior,
-                                     CATAnterior, CATInferior, CATSuperior)
-
-            fatVoidMasks[:, :, slice] = fatVoidMask
-            thoracicMasks[:, :, slice] = thoracicMask
-            lungMasks[:, :, slice] = lungMask
-            SCAT[:, :, slice] = SCATSlice
-            ITAT[:, :, slice] = ITATSlice
-            CAT[:, :, slice] = CATSlice
-
-        toc = time.perf_counter()
-        print('Completed slice %i in %f seconds' % (slice, toc - tic))
-
+        # waterImageMasks[:, :, slice] = waterImageMask
+        #
+        # # Get body mask by combining fat and water masks
+        # # Apply some closing to the image mask to connect any small gaps (such as at umbilical cord)
+        # # Fill all holes which will create a solid body mask
+        # # Remove small objects that are artifacts from segmentation
+        # bodyMask = np.logical_or(fatImageMask, waterImageMask)
+        # bodyMask = skimage.morphology.binary_closing(bodyMask, skimage.morphology.disk(3))
+        # bodyMask = scipy.ndimage.morphology.binary_fill_holes(bodyMask)
+        # bodyMasks[:, :, slice] = bodyMask
+    #
+    #     # Superior of diaphragm is divider between thoracic and abdominal region
+    #     if slice < diaphragmSuperiorSlice:
+    #         fatVoidMask, abdominalMask, SCATSlice, VATSlice = \
+    #             segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask)
+    #
+    #         fatVoidMasks[:, :, slice] = fatVoidMask
+    #         abdominalMasks[:, :, slice] = abdominalMask
+    #         SCAT[:, :, slice] = SCATSlice
+    #         VAT[:, :, slice] = VATSlice
+    #     else:
+    #         fatVoidMask, thoracicMask, lungMask, SCATSlice, ITATSlice, CATSlice = \
+    #             segmentThoracicSlice(slice, fatImageMask, waterImageMask, bodyMask, CATAxial, CATPosterior,
+    #                                  CATAnterior, CATInferior, CATSuperior)
+    #
+    #         fatVoidMasks[:, :, slice] = fatVoidMask
+    #         thoracicMasks[:, :, slice] = thoracicMask
+    #         lungMasks[:, :, slice] = lungMask
+    #         SCAT[:, :, slice] = SCATSlice
+    #         ITAT[:, :, slice] = ITATSlice
+    #         CAT[:, :, slice] = CATSlice
+    #
+    #     toc = time.perf_counter()
+    #     print('Completed slice %i in %f seconds' % (slice, toc - tic))
+    #
     if constants.debug:
-        nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks), constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks), constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks), constants.nrrdHeaderDict)
-
-        nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks), constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks), constants.nrrdHeaderDict)
-
-        nrrd.write(getDebugPath('lungMask.nrrd'), skimage.img_as_ubyte(lungMasks), constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('thoracicMask.nrrd'), skimage.img_as_ubyte(thoracicMasks), constants.nrrdHeaderDict)
-
-    nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict)
-    nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict)
-    nrrd.write(getPath('ITAT.nrrd'), skimage.img_as_ubyte(ITAT), constants.nrrdHeaderDict)
-    nrrd.write(getPath('CAT.nrrd'), skimage.img_as_ubyte(CAT), constants.nrrdHeaderDict)
-
-    if constants.saveMat:
-        scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})
+        nrrd.write(getDebugPath("C:/Users/Clint/PycharmProjects/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data_Nrrd_Output/fatImageMask.nrrd"), skimage.img_as_ubyte(fatImageMasks), constants.nrrdHeaderDict)
+        # nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks), constants.nrrdHeaderDict)
+        # nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks), constants.nrrdHeaderDict)
+        #
+        # nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks), constants.nrrdHeaderDict)
+        # nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks), constants.nrrdHeaderDict)
+        #
+        # nrrd.write(getDebugPath('lungMask.nrrd'), skimage.img_as_ubyte(lungMasks), constants.nrrdHeaderDict)
+        # nrrd.write(getDebugPath('thoracicMask.nrrd'), skimage.img_as_ubyte(thoracicMasks), constants.nrrdHeaderDict)
+    #
+    # nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict)
+    # nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict)
+    # nrrd.write(getPath('ITAT.nrrd'), skimage.img_as_ubyte(ITAT), constants.nrrdHeaderDict)
+    # nrrd.write(getPath('CAT.nrrd'), skimage.img_as_ubyte(CAT), constants.nrrdHeaderDict)
+    #
+    # if constants.saveMat:
+    #     scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT, 'ITAT': ITAT, 'CAT': CAT})
