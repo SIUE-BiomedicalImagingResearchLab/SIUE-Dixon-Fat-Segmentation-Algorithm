@@ -28,10 +28,8 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
         self.t1Series = []
 
-
     @pyqtSlot()
     def on_browseSourceButton_clicked(self):
-
         pass
         # # Read settings file
         # settings = QSettings()
@@ -92,10 +90,9 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
         dataPath = "C:/Users/Clint/PycharmProjects/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data/MF0302-PRE/"
 
-
         print('Beginning segmentation for ' + dataPath)
 
-        #fatImage, waterImage, config = self.loadFile(dataPath)
+        # fatImage, waterImage, config = self.loadFile(dataPath)
         image, config = self.loadFile(dataPath)
         if image is None:
             print("No image")
@@ -111,7 +108,7 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
     @pyqtSlot()
     def on_configureButton_clicked(self):
-        #selectedIndices = self.sourceListView.selectedIndexes()
+        # selectedIndices = self.sourceListView.selectedIndexes()
 
         # if self.sourceModel.rowCount() is 0:
         #     QMessageBox.warning(self, "No source directories",
@@ -129,7 +126,7 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         #     return
 
         # Get selected index text
-        #dataPath = selectedIndices[0].data()
+        # dataPath = selectedIndices[0].data()
         dataPath = "C:/Users/Clint/PycharmProjects/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data/MF0302-PRE/"
 
         # Load data from path
@@ -178,7 +175,9 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
         nrrdHeaderDict = {'space': space, 'space origin': origin,
                           'space directions': (np.identity(3) * np.array(spacing)).tolist()}
-        nrrd.write("C:/Users/Clint/PycharmProjects/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data_Nrrd_Output/newOut.nrrd", volume, nrrdHeaderDict)
+        nrrd.write(
+            "C:/Users/Clint/PycharmProjects/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data_Nrrd_Output/newOut.nrrd",
+            volume, nrrdHeaderDict)
         constants.nrrdHeaderDict = {'space': 'right-anterior-superior'}
 
         configFilename = os.path.join(dataPath, 'config.xml')
@@ -193,7 +192,6 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         configRoot = config.getroot()
 
         return volume, config
-
 
     ###OLD MAIN WINDOW###
     # import os.path
@@ -272,29 +270,7 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
     #
     #     @pyqtSlot()
     #     def on_runButton_clicked(self):
-    #         # If there are no source files, then return
-    #         if self.sourceModel.rowCount() is 0:
-    #             QMessageBox.warning(self, "No source directories",
-    #                                 "There are no source directories in the list currently. Please add some folders "
-    #                                 "before converting.")
-    #             return
     #
-    #         for i in range(self.sourceModel.rowCount()):
-    #             dataPath = self.sourceModel.item(i).text()
-    #
-    #             print('Beginning segmentation for ' + dataPath)
-    #
-    #             fatImage, waterImage, config = self.loadFile(dataPath)
-    #             if fatImage is None:
-    #                 continue
-    #
-    #             # Set constant pathDir to be the current data path to allow writing/reading from the current directory
-    #             constants.pathDir = dataPath
-    #
-    #             # Run segmentation algorithm
-    #             runSegmentation(fatImage, waterImage, config)
-    #
-    #         print('Segmentation complete!')
     #
     #     @pyqtSlot()
     #     def on_configureButton_clicked(self):
