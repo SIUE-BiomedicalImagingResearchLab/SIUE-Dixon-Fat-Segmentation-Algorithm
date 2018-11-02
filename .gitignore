@@ -107,5 +107,15 @@ misc.xml
 # Dictionaries contains information and settings for each user
 dictionaries/
 
+# PyCharm Project specific
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/misc.xml
+.idea/dictionaries
+.idea/inspectionProfiles
+
 # Ignore IML file for project since it contains path dependent information
 *.iml
+
+# Ignore generated files
+generated

@@ -1,0 +1,22 @@
+# run: conda env create --file environment.yml
+name: SDFSA
+channels:
+  - conda-forge
+  - SimpleITK
+dependencies:
+  - python=3
+  - numpy
+  - scikit-image
+  - scikit-learn
+  - matplotlib
+  - SimpleITK
+  - scipy
+  - pip:
+    - lxml
+    - pynrrd
+    - pyqt5
+    - colorama
+    - opencv-python
+    - pydicom
+    - nibabel
+    - pyqt5ac

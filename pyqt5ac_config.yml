@@ -1,0 +1,5 @@
+ioPaths:
+  - - "gui/*.ui"
+    - "generated/%%FILENAME%%_ui.py"
+
+uic_options: --from-imports

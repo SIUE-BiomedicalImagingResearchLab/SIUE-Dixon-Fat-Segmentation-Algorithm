@@ -1,14 +1,23 @@
 import sys
 
-from mainWindow import *
+from util import constants
+
+# If debugging application then automatically generate the UI if necessary
+if constants.debug:
+    import pyqt5ac
+
+    pyqt5ac.main(config='pyqt5ac_config.yml')
+
+from gui.mainWindow import *
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
 
 # Back up the reference to the exceptionhook
 sys._excepthook = sys.excepthook
 
-
 # Exception hook is used to print out the exception
 # This is necessary for Qt 5 applications because Qt uses an event loop which will not trigger a traceback
-def my_exception_hook(exctype, value, traceback):
+def customExceptionHook(exctype, value, traceback):
     # Print the error and traceback
     print(exctype, value, traceback)
 
@@ -18,7 +27,7 @@ def my_exception_hook(exctype, value, traceback):
 
 
 # Set the exception hook to our wrapping function
-sys.excepthook = my_exception_hook
+sys.excepthook = customExceptionHook
 
 
 def main():
