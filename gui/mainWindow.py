@@ -9,6 +9,7 @@ from core.loadData import loadData, updateCachedData
 from core.runSegmentation import runSegmentation
 from generated import mainWindow_ui
 from gui.configureWindow_TexasTechDixon import ConfigureWindow as ConfigureWindowTexasTechDixon
+from gui.configureWindow_WashUDixon import ConfigureWindow as ConfigureWindowWashUDixon
 from util import constants
 from util.enums import ScanFormat
 from util.fileDialog import FileDialog
@@ -162,7 +163,8 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         elif format == ScanFormat.WashUUnknown:
             raise NotImplementedError()
         elif format == ScanFormat.WashUDixon:
-            raise NotImplementedError()
+            configureWindow = ConfigureWindowWashUDixon(data, dataPath, parent=self)
+            configureWindow.exec()
         else:
             raise ValueError('Format must be a valid ScanFormat option')
 

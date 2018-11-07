@@ -26,7 +26,9 @@ def loadDirectory(path, patientID=None, studyID=None, seriesID=None):
     # Loop through each DICOM filename
     for filename in DCMFilenames:
         # Read DICOM file
-        DCMImage = pydicom.read_file(filename)
+        # Set defer_size to be 2048 bytes which means any data larger than this will not be read until it is first
+        # used in code. This should primarily be the pixel data
+        DCMImage = pydicom.dcmread(filename, defer_size=2048)
 
         if patientID:
             if DCMImage.PatientID != patientID:

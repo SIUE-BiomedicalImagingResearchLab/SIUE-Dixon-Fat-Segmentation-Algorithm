@@ -16,10 +16,8 @@ def sortSlices(datasets, method=MethodType.Unknown, reverse=False):
     if len(datasets) == 0:
         raise TypeError('Must have at least one image in series to sort slices')
 
-    type_ = VolumeType.Unknown
-
     if method is MethodType.Unknown:
-        method, type_ = getBestMethod(datasets)
+        method = getBestMethod(datasets)
     elif not isMethodAvailable(datasets, method):
         raise TypeError('Invalid method specified')
 

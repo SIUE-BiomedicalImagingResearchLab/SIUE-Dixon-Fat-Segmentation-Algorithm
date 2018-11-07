@@ -10,10 +10,8 @@ def combineSlices(datasets, method=MethodType.Unknown, reverse=False):
         Origin, spacing, coordinate system, and orientation.
     """
 
-    type_ = VolumeType.Unknown
-
     if method is MethodType.Unknown:
-        method, type_ = getBestMethod(datasets)
+        method = getBestMethod(datasets)
     elif not isMethodAvailable(datasets, method):
         raise TypeError('Invalid method specified')
 
@@ -24,9 +22,9 @@ def combineSlices(datasets, method=MethodType.Unknown, reverse=False):
 
     space = 'left-posterior-superior'
     # Append the Z cosines to image orientation and then resize into 3x3 matrix
-    orientation = np.reshape(list(datasets[0].ImageOrientationPatient) + sliceCosines, (3, 3)).T
+    orientation = np.append(np.asfarray(datasets[0].ImageOrientationPatient), sliceCosines).reshape((3, 3))
     # Concatenate (x,y) spacing list and zSpacing list
-    spacing = list(datasets[0].PixelSpacing) + list([zSpacing])
-    origin = datasets[0].ImagePositionPatient
+    spacing = np.append(np.asfarray(datasets[0].PixelSpacing), zSpacing)
+    origin = np.asfarray(datasets[0].ImagePositionPatient)
 
-    return method, type_, space, orientation, spacing, origin, volume
+    return method, space, orientation, spacing, origin, volume

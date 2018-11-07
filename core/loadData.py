@@ -1,25 +1,28 @@
 import os
+import re
 
 import nibabel as nib
 import numpy as np
 import skimage.exposure
+import yaml
 from lxml import etree
 
 from util import constants
+from util import dicom2
 from util.enums import ScanFormat
 
 _data = {}
+
 
 def loadData(dataPath, format):
     # Load data from cache if able
     data = _data.get(dataPath)
     if data:
-        print('loaded from acche')
         return data
 
     # Load the data normally
     if format == ScanFormat.TexasTechDixon:
-        data = _loadTTUDixonData(dataPath)
+        data = _loadTexasTechDixonData(dataPath)
     elif format == ScanFormat.WashUUnknown:
         data = _loadWashUUnknownData(dataPath)
     elif format == ScanFormat.WashUDixon:
@@ -31,11 +34,13 @@ def loadData(dataPath, format):
     _data[dataPath] = data
     return data
 
+
 def updateCachedData(dataPath, data):
     # Update cached data or add if not available
     _data[dataPath] = data
 
-def _loadTTUDixonData(dataPath):
+
+def _loadTexasTechDixonData(dataPath):
     # Get the filenames for the rectified NIFTI files for current dataPath
     niiFatUpperFilename = os.path.join(dataPath, 'fatUpper.nii')
     niiFatLowerFilename = os.path.join(dataPath, 'fatLower.nii')
@@ -43,9 +48,9 @@ def _loadTTUDixonData(dataPath):
     niiWaterLowerFilename = os.path.join(dataPath, 'waterLower.nii')
     configFilename = os.path.join(dataPath, 'config.xml')
 
-    if not os.path.isfile(niiFatUpperFilename) and os.path.isfile(niiFatLowerFilename) and \
+    if not (os.path.isfile(niiFatUpperFilename) and os.path.isfile(niiFatLowerFilename) and \
             os.path.isfile(niiWaterUpperFilename) and os.path.isfile(niiWaterLowerFilename) and \
-            os.path.isfile(configFilename):
+            os.path.isfile(configFilename)):
         raise Exception('Missing required files from source path folder.')
 
     # Load unrectified NIFTI files for the current dataPath
@@ -79,7 +84,6 @@ def _loadTTUDixonData(dataPath):
     fatImage = np.concatenate((fatLowerImage, fatUpperImage), axis=2)
     waterImage = np.concatenate((waterLowerImage, waterUpperImage), axis=2)
 
-    # TODO Why convert to float? Is this necessary
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
     fatImage = skimage.exposure.rescale_intensity(fatImage.astype(float), out_range=(0.0, 1.0))
     waterImage = skimage.exposure.rescale_intensity(waterImage.astype(float), out_range=(0.0, 1.0))
@@ -105,64 +109,64 @@ def _loadWashUUnknownData(dataPath):
 
 
 def _loadWashUDixonData(dataPath):
-    raise NotImplementedError()
+    # Create necessary filenames, one for DICOM directory and another for the configuration file
+    dicomDirectory = os.path.join(dataPath, 'SCANS')
+    configFilename = os.path.join(dataPath, 'config.yml')
 
-    # # This is for the T1 Data from WashU
-    # def loadT1File(self, dataPath):
-    #     dicomDir = dataPath + "/SCANS/"
-    #     print(dicomDir)
-    #     # Load DICOM directory and organize by patients, studies, and series
-    #     patients = dicom2.loadDirectory(dicomDir)
-    #     # Should only be one patient so retrieve it
-    #     patient = patients.only()
-    #     # Should only be one study so retrieve the one study
-    #
-    #     # doesn't work because of 35 studies
-    #     # Double loop through studies then series (series is the images
-    #     study = patient.only()
-    #     #
-    #     self.t1Series = []
-    #     for UID, series in study.items():
-    #         if series.Description.startswith('t1_'):
-    #             self.t1Series.append(series)
-    #
-    #     # Sort cine images by the series number, looks nicer
-    #     self.t1Series.sort(key=lambda x: x.Number)
-    #
-    #     # Loop through each t1 series
-    #     for series in self.t1Series:
-    #         seriesNumber = 21001
-    #         sliceIndex = -1
-    #
-    #         sortedSeries, _, _ = dicom2.sortSlices(series, dicom2.MethodType.Unknown)
-    #         if sliceIndex < 0:
-    #             continue
-    #         elif sliceIndex >= len(sortedSeries):
-    #             QMessageBox.critical(self, 'Invalid slice index', 'Invalid slice index given for series number %i'
-    #                                  % seriesNumber)
-    #             return
-    #
-    #         print("Slices Sorted")
-    #
-    #     (method, type_, space, orientation, spacing, origin, volume) = \
-    #         dicom2.combineSlices(sortedSeries, method=dicom2.MethodType.Unknown)
-    #
-    #     nrrdHeaderDict = {'space': space, 'space origin': origin,
-    #                       'space directions': (np.identity(3) * np.array(spacing)).tolist()}
-    #     nrrd.write(
-    #         "/home/somecallmekenny/SIUE-Dixon-Fat-Segmentation-Algorithm/MRI_Data_Nrrd_Output/newOut.nrrd",
-    #         volume, nrrdHeaderDict)
-    #     constants.nrrdHeaderDict = {'space': 'right-anterior-superior'}
-    #
-    #     configFilename = os.path.join(dataPath, 'config.xml')
-    #
-    #     if not os.path.isfile(configFilename):
-    #         print('Missing required files from source path folder. Continuing...')
-    #         return None, None, None
-    #     # Load config XML file
-    #     config = etree.parse(configFilename)
-    #
-    #     # Get the root of the config XML file
-    #     configRoot = config.getroot()
-    #
-    #     return volume, config
+    # Load the configuration file if it exists
+    if os.path.exists(configFilename):
+        with open(configFilename, 'r') as fh:
+            config = yaml.load(fh)
+    else:
+        # Otherwise create the config as an empty dictionary
+        config = {}
+
+    # Load DICOM data
+    patients = dicom2.loadDirectory(dicomDirectory)
+
+    # Should only be one patient
+    patient = patients.only()
+
+    # Thoracic and abdominal series will be stored for the fat/water scans here
+    fatSeries, waterSeries = [], []
+
+    for _, study in patient.items():
+        for _, series in study.items():
+            match = re.match(r'^T1 VIBE DIXON ABD [\d]*mm_([FW])$', series.Description)
+            # Skip if match not found
+            if not match:
+                continue
+
+            # Append to fat or water series depending on series description
+            fatSeries.append(series) if match.group(1) == 'F' else waterSeries.append(series)
+
+    if len(fatSeries) != 2 or len(waterSeries) != 2:
+        raise Exception('Invalid DICOM data given: Should only be an abdominal and thoracic fat and water image.')
+
+    # Combine the two series into one large list of images
+    fatSeries = fatSeries[0] + fatSeries[1]
+    waterSeries = waterSeries[0] + waterSeries[1]
+
+    # Combine the series to get the fat and water images
+    (method, space, orientation, spacing, origin, fatImage) = \
+        dicom2.combineSlices(fatSeries, dicom2.MethodType.SliceLocation)
+    (method, space, orientation, spacing, origin, waterImage) = \
+        dicom2.combineSlices(waterSeries, dicom2.MethodType.SliceLocation)
+
+    # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
+    # Also take the transpose of the fat and water images to get it such that the first dimension is x & second y
+    # instead of rows & columns
+    fatImage = skimage.exposure.rescale_intensity(fatImage.astype(float), out_range=(0.0, 1.0))
+    waterImage = skimage.exposure.rescale_intensity(waterImage.astype(float), out_range=(0.0, 1.0))
+
+    # Image data is in Fortran memory order (rows, columns), swap axes to make it C order (x, y)
+    fatImage, waterImage = np.swapaxes(fatImage, 0, 1), np.swapaxes(waterImage, 0, 1)
+
+    # Set constant pathDir to be the current data path to allow writing/reading from the current directory
+    constants.pathDir = dataPath
+
+    # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
+    constants.nrrdHeaderDict = {'space': space, 'space directions': orientation * spacing[:, None],
+                                'space origin': origin}
+
+    return fatImage, waterImage, config

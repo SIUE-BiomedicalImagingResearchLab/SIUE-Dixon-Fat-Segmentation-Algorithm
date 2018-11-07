@@ -42,6 +42,18 @@ def isMethodAvailable(datasets, method):
         raise TypeError('Invalid method specified')
 
 
+def getTypeFromMethod(method):
+    """
+    Select the type of volume based off the method used to combine slices
+    """
+    if method in [MethodType.SliceLocation, MethodType.PatientLocation]:
+        return VolumeType.Spatial
+    elif method in [MethodType.TriggerTime, MethodType.AcquisitionDateTime]:
+        return VolumeType.Temporal
+    else:
+        return VolumeType.Unknown
+
+
 def getBestMethod(datasets):
     """
     Select the best method to use for combining the slices in the dataset. The methods are checked in the following
@@ -55,32 +67,27 @@ def getBestMethod(datasets):
     """
     # noinspection PyUnusedLocal
     method = MethodType.Unknown
-    type_ = VolumeType.Unknown
 
     if isMethodAvailable(datasets, MethodType.SliceLocation) \
             and any([datasets[0].SliceLocation != d.SliceLocation for d in datasets]):
         method = MethodType.SliceLocation
-        type_ = VolumeType.Spatial
     elif isMethodAvailable(datasets, MethodType.PatientLocation) \
             and any([datasets[0].ImageOrientationPatient != d.ImageOrientationPatient
                      or datasets[0].ImagePositionPatient != d.ImagePositionPatient for d in datasets]):
         method = MethodType.PatientLocation
-        type_ = VolumeType.Spatial
     elif isMethodAvailable(datasets, MethodType.TriggerTime) \
             and any([datasets[0].TriggerTime != d.TriggerTime for d in datasets]):
         method = MethodType.TriggerTime
-        type_ = VolumeType.Temporal
     elif isMethodAvailable(datasets, MethodType.AcquisitionDateTime) \
             and any([datasets[0].AcquisitionDateTime != d.AcquisitionDateTime for d in datasets]):
         method = MethodType.AcquisitionDateTime
-        type_ = VolumeType.Temporal
     elif isMethodAvailable(datasets, MethodType.ImageNumber) \
             and any([datasets[0].ImageNumber != d.ImageNumber for d in datasets]):
         method = MethodType.ImageNumber
     else:
         raise TypeError('Unable to find best method')
 
-    return method, type_
+    return method
 
 
 def slicePositionsFromPatientInfo(datasets):
@@ -100,4 +107,4 @@ def slicePositionsFromPatientInfo(datasets):
     sliceCosines = np.cross(rowCosines, colCosines)
 
     # Slice location is dot product of slice cosines and the image patient position
-    return sliceCosines.tolist(), [np.dot(sliceCosines, d.ImagePositionPatient) for d in datasets]
+    return sliceCosines, [np.dot(sliceCosines, d.ImagePositionPatient) for d in datasets]

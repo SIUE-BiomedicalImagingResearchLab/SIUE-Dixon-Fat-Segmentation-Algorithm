@@ -20,3 +20,4 @@ dependencies:
     - pydicom
     - nibabel
     - pyqt5ac
+    - pyyaml
