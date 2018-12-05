@@ -1,0 +1,3 @@
+[submodule "util/pydicomext"]
+	path = util/pydicomext
+	url = https://github.com/addisonElliott/pydicomext.git

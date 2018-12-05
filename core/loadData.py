@@ -10,6 +10,7 @@ from lxml import etree
 from util import constants
 from util import dicom2
 from util.enums import ScanFormat
+from util.util import DCMIsMultiFrame
 
 _data = {}
 
@@ -132,26 +133,49 @@ def _loadWashUDixonData(dataPath):
 
     for _, study in patient.items():
         for _, series in study.items():
-            match = re.match(r'^T1 VIBE DIXON ABD [\d]*mm_([FW])$', series.Description)
+            match = re.match(r'(^T1 VIBE DIXON ABD [\d]*mm_([FW])$)|(^t1_vibe_dixon_tra_p3_bh_([FW])$)',
+                             series.Description)
+
             # Skip if match not found
             if not match:
                 continue
 
+            # Retrieve 2nd or 4th group whichever is present
+            if match.group(2):
+                imageType = match.group(2)
+            elif match.group(4):
+                imageType = match.group(4)
+            else:
+                imageType = None
+
+            # Throw an error if its not F or W prefix
+            if imageType not in ['F', 'W']:
+                raise ValueError('Invalid image type (F or W)')
+
             # Append to fat or water series depending on series description
-            fatSeries.append(series) if match.group(1) == 'F' else waterSeries.append(series)
+            fatSeries.append(series) if imageType == 'F' else waterSeries.append(series)
 
     if len(fatSeries) != 2 or len(waterSeries) != 2:
         raise Exception('Invalid DICOM data given: Should only be an abdominal and thoracic fat and water image.')
 
-    # Combine the two series into one large list of images
-    fatSeries = fatSeries[0] + fatSeries[1]
-    waterSeries = waterSeries[0] + waterSeries[1]
+    if not (DCMIsMultiFrame(fatSeries[0]) == DCMIsMultiFrame(fatSeries[1]) == DCMIsMultiFrame(waterSeries[0]) ==
+            DCMIsMultiFrame(waterSeries[1])):
+        raise Exception('Fat and water series should collectively use or don\'t use the multi-frame module')
 
-    # Combine the series to get the fat and water images
-    (method, space, orientation, spacing, origin, fatImage) = \
-        dicom2.combineSlices(fatSeries, dicom2.MethodType.SliceLocation)
-    (method, space, orientation, spacing, origin, waterImage) = \
-        dicom2.combineSlices(waterSeries, dicom2.MethodType.SliceLocation)
+    if DCMIsMultiFrame(fatSeries[0]):
+        # TODO Determine which way these should be put together, could be reversed
+        fatImage = np.stack((fatSeries[0][0].pixel_array, fatSeries[1][0].pixel_array), axis=0).T
+        waterImage = np.stack((waterSeries[0][0].pixel_array, waterSeries[1][0].pixel_array), axis=0).T
+    else:
+        # Combine the two series into one large list of images
+        fatSeries = fatSeries[0] + fatSeries[1]
+        waterSeries = waterSeries[0] + waterSeries[1]
+
+        # Combine the series to get the fat and water images
+        (method, space, orientation, spacing, origin, fatImage) = \
+            dicom2.combineSlices(fatSeries, dicom2.MethodType.SliceLocation)
+        (method, space, orientation, spacing, origin, waterImage) = \
+            dicom2.combineSlices(waterSeries, dicom2.MethodType.SliceLocation)
 
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
     # Also take the transpose of the fat and water images to get it such that the first dimension is x & second y

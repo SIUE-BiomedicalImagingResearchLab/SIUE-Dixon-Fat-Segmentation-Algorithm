@@ -67,3 +67,6 @@ def nearestargwhere(array, index=0, axis=0):
 
 def defaultmin(x, default):
     return default if x.size == 0 else x.min()
+
+def DCMIsMultiFrame(series):
+    return len(series) == 1 and 'NumberOfFrames' in series[0]
