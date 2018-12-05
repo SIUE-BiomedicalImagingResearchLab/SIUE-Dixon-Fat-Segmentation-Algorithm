@@ -4,16 +4,16 @@ import yaml
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
-from generated import configureWindow_WashUDixon_ui
+from generated import configureWindow_WashUUnknown_ui
 from util import constants
 
 
-class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow):
+class ConfigureWindow(QDialog, configureWindow_WashUUnknown_ui.Ui_ConfigureWindow):
     def __init__(self, data, dataPath, parent=None):
         super(ConfigureWindow, self).__init__(parent)
         self.setupUi(self)
 
-        self.fatImage, self.waterImage, self.config = data
+        self.image, self.config = data
         self.dataPath = dataPath
         self.clickState = 0
         self.clickData = []
@@ -57,10 +57,9 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
     def setupDefaults(self):
         self.sliceSlider.setValue(self.sliceWidget.sliceNumber)
         self.sliceSlider.setMinimum(0)
-        self.sliceSlider.setMaximum(self.fatImage.shape[2] - 1)
+        self.sliceSlider.setMaximum(self.image.shape[2] - 1)
 
-        self.viewFatRadioButton.setChecked(True)
-        self.sliceWidget.image = self.fatImage
+        self.sliceWidget.image = self.image
         self.noneRadioButton.setChecked(True)
 
         diaphragmAxialSlice = self.config.get('diaphragmAxial')
@@ -99,30 +98,14 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
             self.leftArmBounds = []
             self.rightArmBounds = []
 
-        self.umbilicisInferiorSpinBox.setMaximum(self.fatImage.shape[2] - 1)
-        self.umbilicisSuperiorSpinBox.setMaximum(self.fatImage.shape[2] - 1)
-        self.umbilicisLeftSpinBox.setMaximum(self.fatImage.shape[0] - 1)
-        self.umbilicisRightSpinBox.setMaximum(self.fatImage.shape[0] - 1)
-        self.umbilicisCoronalSpinBox.setMaximum(self.fatImage.shape[1] - 1)
+        self.umbilicisInferiorSpinBox.setMaximum(self.image.shape[2] - 1)
+        self.umbilicisSuperiorSpinBox.setMaximum(self.image.shape[2] - 1)
+        self.umbilicisLeftSpinBox.setMaximum(self.image.shape[0] - 1)
+        self.umbilicisRightSpinBox.setMaximum(self.image.shape[0] - 1)
+        self.umbilicisCoronalSpinBox.setMaximum(self.image.shape[1] - 1)
 
     def getData(self):
-        return self.fatImage, self.waterImage, self.config
-
-    @pyqtSlot(bool)
-    def on_viewFatRadioButton_toggled(self, checked):
-        if not checked:
-            return
-
-        self.sliceWidget.image = self.fatImage
-        self.sliceWidget.updateFigure()
-
-    @pyqtSlot(bool)
-    def on_viewWaterRadioButton_toggled(self, checked):
-        if not checked:
-            return
-
-        self.sliceWidget.image = self.waterImage
-        self.sliceWidget.updateFigure()
+        return self.image, self.config
 
     @pyqtSlot(bool)
     def on_noneRadioButton_toggled(self, checked):
@@ -247,14 +230,14 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
         # DICOM uses LPS coordinate system which is converted to RAS in sliceWidget
         # We need to convert the X/Y coordinates back to LPS
         if event.inaxes:
-            event.xdata = self.fatImage.shape[0] - event.xdata
-            event.ydata = self.fatImage.shape[1] - event.ydata
+            event.xdata = self.image.shape[0] - event.xdata
+            event.ydata = self.image.shape[1] - event.ydata
 
     def transformX(self, x):
-        return self.fatImage.shape[0] - x
+        return self.image.shape[0] - x
 
     def transformY(self, y):
-        return self.fatImage.shape[1] - y
+        return self.image.shape[1] - y
 
     def on_sliceWidget_mouseMoved(self, event):
         self.transformEvent(event)
@@ -274,20 +257,16 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
             value = self.sliceSlider.value() - 1
 
             if value < 0:
-                value = self.fatImage.shape[2] - 1
+                value = self.image.shape[2] - 1
 
             self.sliceSlider.setValue(value)
         elif event.key == 'right':
             value = self.sliceSlider.value() + 1
 
-            if value >= self.fatImage.shape[2]:
+            if value >= self.image.shape[2]:
                 value = 0
 
             self.sliceSlider.setValue(value)
-        elif event.key == 'f':
-            self.viewFatRadioButton.setChecked(True)
-        elif event.key == 'w':
-            self.viewWaterRadioButton.setChecked(True)
 
     def on_sliceWidget_clicked(self, event):
         self.transformEvent(event)

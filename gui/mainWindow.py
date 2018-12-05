@@ -10,6 +10,7 @@ from core.runSegmentation import runSegmentation
 from generated import mainWindow_ui
 from gui.configureWindow_TexasTechDixon import ConfigureWindow as ConfigureWindowTexasTechDixon
 from gui.configureWindow_WashUDixon import ConfigureWindow as ConfigureWindowWashUDixon
+from gui.configureWindow_WashUUnknown import ConfigureWindow as ConfigureWindowWashUUnknown
 from util import constants
 from util.enums import ScanFormat
 from util.fileDialog import FileDialog
@@ -106,7 +107,7 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
             # Attempt to load the data from the data path
             try:
-                data = loadData(dataPath, format)
+                data = loadData(dataPath, format, self.cacheDataCheckbox.isChecked())
             except Exception:
                 print('Unable to load data from %s. Skipping...' % dataPath)
                 print(traceback.format_exc())
@@ -151,7 +152,7 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
         # Attempt to load the data from the data path
         try:
-            data = loadData(dataPath, format)
+            data = loadData(dataPath, format, self.cacheDataCheckbox.isChecked())
         except Exception:
             print('Unable to load data from %s. Skipping...' % dataPath)
             print(traceback.format_exc())
@@ -161,31 +162,17 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
             configureWindow = ConfigureWindowTexasTechDixon(data, dataPath, parent=self)
             configureWindow.exec()
         elif format == ScanFormat.WashUUnknown:
-            raise NotImplementedError()
+            configureWindow = ConfigureWindowWashUUnknown(data, dataPath, parent=self)
+            configureWindow.exec()
         elif format == ScanFormat.WashUDixon:
             configureWindow = ConfigureWindowWashUDixon(data, dataPath, parent=self)
             configureWindow.exec()
         else:
             raise ValueError('Format must be a valid ScanFormat option')
 
-        # Update the cached data
-        updateCachedData(dataPath, configureWindow.getData())
-
-    def loadData(self, dataPath, format):
-        try:
-            # Load data from cache if available
-            data = self.data.get(dataPath)
-            if not data:
-                data = loadData(dataPath, format)
-
-                # Cache the data for later
-                self.data[dataPath] = data
-
-            return data
-        except Exception:
-            print('Unable to load data from %s. Skipping...' % dataPath)
-            print(traceback.format_exc())
-            return None
+        # Update the cached data if it was cached
+        if self.cacheDataCheckbox.isChecked():
+            updateCachedData(dataPath, configureWindow.getData())
 
     @pyqtSlot()
     def closeEvent(self, closeEvent):

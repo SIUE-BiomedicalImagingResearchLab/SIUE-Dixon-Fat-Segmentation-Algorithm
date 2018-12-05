@@ -10,12 +10,13 @@ from lxml import etree
 from util import constants
 from util import pydicomext
 from util.enums import ScanFormat
+from util.pydicomext import MethodType
 from util.util import DCMIsMultiFrame
 
 _data = {}
 
 
-def loadData(dataPath, format):
+def loadData(dataPath, format, saveCache=True):
     # Load data from cache if able
     data = _data.get(dataPath)
     if data:
@@ -31,8 +32,10 @@ def loadData(dataPath, format):
     else:
         raise ValueError('Format parameter must be a valid ScanFormat option')
 
-    # Save the data to cache
-    _data[dataPath] = data
+    # Save the data to cache if saveCache is True
+    if saveCache:
+        _data[dataPath] = data
+
     return data
 
 
@@ -106,7 +109,58 @@ def _loadTexasTechDixonData(dataPath):
 
 
 def _loadWashUUnknownData(dataPath):
-    raise NotImplementedError()
+    # Create necessary filenames, one for DICOM directory and another for the configuration file
+    dicomDirectory = os.path.join(dataPath, 'SCANS')
+    configFilename = os.path.join(dataPath, 'config.yml')
+
+    # Load the configuration file if it exists
+    if os.path.exists(configFilename):
+        with open(configFilename, 'r') as fh:
+            config = yaml.load(fh)
+    else:
+        # Otherwise create the config as an empty dictionary
+        config = {}
+
+    # Load DICOM data
+    dicomDir = pydicomext.loadDirectory(dicomDirectory)
+
+    # Should only be one patient
+    patient = dicomDir.only()
+
+    # Series for unknown sequence containing abdominal information
+    imageSeries = None
+
+    for _, study in patient.items():
+        for _, series in study.items():
+            # Skip any series that do not match this name
+            if series.description.lower() != 't1_fl2d_tra_p3_256':
+                continue
+
+            # Save series and break out of loop
+            imageSeries = series
+            break
+
+    if imageSeries is None:
+        raise ValueError('Invalid DICOM data given: Should contain series named \'t1_fl2d_tra_p3_256\'')
+
+    # Combine the image series to get a volume (along with metadata about that volume)
+    (method, space, orientation, spacing, origin, image) = pydicomext.combineSlices(imageSeries,
+                                                                                    MethodType.SliceLocation)
+
+    # Normalize the image so that the intensities are between 0.0->1.0 and also convert to float data type
+    image = skimage.exposure.rescale_intensity(image.astype(float), out_range=(0.0, 1.0))
+
+    # Image data is in Fortran memory order (rows, columns), swap axes to make it C order (x, y)
+    image = np.swapaxes(image, 0, 1)
+
+    # Set constant pathDir to be the current data path to allow writing/reading from the current directory
+    constants.pathDir = dataPath
+
+    # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
+    constants.nrrdHeaderDict = {'space': space, 'space directions': orientation * spacing[:, None],
+                                'space origin': origin}
+
+    return image, config
 
 
 def _loadWashUDixonData(dataPath):
@@ -134,7 +188,7 @@ def _loadWashUDixonData(dataPath):
     for _, study in patient.items():
         for _, series in study.items():
             match = re.match(r'(^T1 VIBE DIXON ABD [\d]*mm_([FW])$)|(^t1_vibe_dixon_tra_p3_bh_([FW])$)',
-                             series.Description)
+                             series.description)
 
             # Skip if match not found
             if not match:
@@ -173,13 +227,11 @@ def _loadWashUDixonData(dataPath):
 
         # Combine the series to get the fat and water images
         (method, space, orientation, spacing, origin, fatImage) = \
-            pydicomext.combineSlices(fatSeries, pydicomext.MethodType.SliceLocation)
+            pydicomext.combineSlices(fatSeries, MethodType.SliceLocation)
         (method, space, orientation, spacing, origin, waterImage) = \
-            pydicomext.combineSlices(waterSeries, pydicomext.MethodType.SliceLocation)
+            pydicomext.combineSlices(waterSeries, MethodType.SliceLocation)
 
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
-    # Also take the transpose of the fat and water images to get it such that the first dimension is x & second y
-    # instead of rows & columns
     fatImage = skimage.exposure.rescale_intensity(fatImage.astype(float), out_range=(0.0, 1.0))
     waterImage = skimage.exposure.rescale_intensity(waterImage.astype(float), out_range=(0.0, 1.0))
 

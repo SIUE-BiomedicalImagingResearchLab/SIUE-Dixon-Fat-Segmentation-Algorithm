@@ -84,7 +84,7 @@
             </property>
            </widget>
           </item>
-          <item row="7" column="0" colspan="2">
+          <item row="6" column="0" colspan="2">
            <layout class="QGridLayout" name="gridLayout_6">
             <item row="0" column="1">
              <widget class="QPushButton" name="panButton">
@@ -118,7 +118,7 @@
             </item>
            </layout>
           </item>
-          <item row="12" column="1">
+          <item row="11" column="1">
            <spacer name="verticalSpacer">
             <property name="orientation">
              <enum>Qt::Vertical</enum>
@@ -131,7 +131,7 @@
             </property>
            </spacer>
           </item>
-          <item row="9" column="0" colspan="2">
+          <item row="8" column="0" colspan="2">
            <widget class="QLabel" name="infoLabel">
             <property name="font">
              <font>
@@ -143,7 +143,19 @@
             </property>
            </widget>
           </item>
-          <item row="8" column="0" colspan="2">
+          <item row="9" column="0" colspan="2">
+           <widget class="QPushButton" name="saveButton">
+            <property name="font">
+             <font>
+              <pointsize>12</pointsize>
+             </font>
+            </property>
+            <property name="text">
+             <string>Save &amp;&amp; Close</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0" colspan="2">
            <layout class="QHBoxLayout" name="horizontalLayout">
             <property name="spacing">
              <number>12</number>
@@ -199,19 +211,42 @@
             </property>
            </widget>
           </item>
-          <item row="10" column="0" colspan="2">
-           <widget class="QPushButton" name="saveButton">
-            <property name="font">
-             <font>
-              <pointsize>12</pointsize>
-             </font>
+          <item row="3" column="0" colspan="2">
+           <widget class="QGroupBox" name="groupBox_5">
+            <property name="title">
+             <string>Diaphragm</string>
             </property>
-            <property name="text">
-             <string>Save &amp;&amp; Close</string>
-            </property>
+            <layout class="QGridLayout" name="gridLayout_4">
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_8">
+               <property name="text">
+                <string>Axial: </string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="diaphragmAxialSpinBox">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimum">
+                <number>-1</number>
+               </property>
+               <property name="maximum">
+                <number>300</number>
+               </property>
+               <property name="value">
+                <number>-1</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
           </item>
-          <item row="5" column="0" colspan="2">
+          <item row="4" column="0" colspan="2">
            <widget class="QGroupBox" name="groupBox_3">
             <property name="title">
              <string>Umbilicis</string>
@@ -259,6 +294,9 @@
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
+               </property>
+               <property name="toolTipDuration">
+                <number>-1</number>
                </property>
                <property name="minimum">
                 <number>-1</number>
@@ -351,64 +389,6 @@
            </widget>
           </item>
           <item row="2" column="0" colspan="2">
-           <widget class="QGroupBox" name="groupBox_6">
-            <property name="title">
-             <string>View</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_3">
-             <item>
-              <widget class="QRadioButton" name="viewFatRadioButton">
-               <property name="text">
-                <string>Fat Only</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QRadioButton" name="viewWaterRadioButton">
-               <property name="text">
-                <string>Water Only</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item row="4" column="0" colspan="2">
-           <widget class="QGroupBox" name="groupBox_5">
-            <property name="title">
-             <string>Diaphragm</string>
-            </property>
-            <layout class="QGridLayout" name="gridLayout_4">
-             <item row="1" column="0">
-              <widget class="QLabel" name="label_8">
-               <property name="text">
-                <string>Axial: </string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QSpinBox" name="diaphragmAxialSpinBox">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="minimum">
-                <number>-1</number>
-               </property>
-               <property name="maximum">
-                <number>300</number>
-               </property>
-               <property name="value">
-                <number>-1</number>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item row="3" column="0" colspan="2">
            <widget class="QGroupBox" name="groupBox_2">
             <property name="title">
              <string>Editing</string>
@@ -480,8 +460,6 @@
  <tabstops>
   <tabstop>scrollArea</tabstop>
   <tabstop>sliceSlider</tabstop>
-  <tabstop>viewFatRadioButton</tabstop>
-  <tabstop>viewWaterRadioButton</tabstop>
   <tabstop>noneRadioButton</tabstop>
   <tabstop>diaphragmRadioButton</tabstop>
   <tabstop>umbilicisRadioButton</tabstop>
