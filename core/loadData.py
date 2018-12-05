@@ -8,7 +8,7 @@ import yaml
 from lxml import etree
 
 from util import constants
-from util import dicom2
+from util import pydicomext
 from util.enums import ScanFormat
 from util.util import DCMIsMultiFrame
 
@@ -123,10 +123,10 @@ def _loadWashUDixonData(dataPath):
         config = {}
 
     # Load DICOM data
-    patients = dicom2.loadDirectory(dicomDirectory)
+    dicomDir = pydicomext.loadDirectory(dicomDirectory)
 
     # Should only be one patient
-    patient = patients.only()
+    patient = dicomDir.only()
 
     # Thoracic and abdominal series will be stored for the fat/water scans here
     fatSeries, waterSeries = [], []
@@ -173,9 +173,9 @@ def _loadWashUDixonData(dataPath):
 
         # Combine the series to get the fat and water images
         (method, space, orientation, spacing, origin, fatImage) = \
-            dicom2.combineSlices(fatSeries, dicom2.MethodType.SliceLocation)
+            pydicomext.combineSlices(fatSeries, pydicomext.MethodType.SliceLocation)
         (method, space, orientation, spacing, origin, waterImage) = \
-            dicom2.combineSlices(waterSeries, dicom2.MethodType.SliceLocation)
+            pydicomext.combineSlices(waterSeries, pydicomext.MethodType.SliceLocation)
 
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
     # Also take the transpose of the fat and water images to get it such that the first dimension is x & second y
