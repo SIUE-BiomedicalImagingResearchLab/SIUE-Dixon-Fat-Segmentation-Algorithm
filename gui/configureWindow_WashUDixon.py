@@ -57,7 +57,7 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
     def setupDefaults(self):
         self.sliceSlider.setValue(self.sliceWidget.sliceNumber)
         self.sliceSlider.setMinimum(0)
-        self.sliceSlider.setMaximum(self.fatImage.shape[2] - 1)
+        self.sliceSlider.setMaximum(self.fatImage.shape[0] - 1)
 
         self.viewFatRadioButton.setChecked(True)
         self.sliceWidget.image = self.fatImage
@@ -99,10 +99,10 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
             self.leftArmBounds = []
             self.rightArmBounds = []
 
-        self.umbilicisInferiorSpinBox.setMaximum(self.fatImage.shape[2] - 1)
-        self.umbilicisSuperiorSpinBox.setMaximum(self.fatImage.shape[2] - 1)
-        self.umbilicisLeftSpinBox.setMaximum(self.fatImage.shape[0] - 1)
-        self.umbilicisRightSpinBox.setMaximum(self.fatImage.shape[0] - 1)
+        self.umbilicisInferiorSpinBox.setMaximum(self.fatImage.shape[0] - 1)
+        self.umbilicisSuperiorSpinBox.setMaximum(self.fatImage.shape[0] - 1)
+        self.umbilicisLeftSpinBox.setMaximum(self.fatImage.shape[2] - 1)
+        self.umbilicisRightSpinBox.setMaximum(self.fatImage.shape[2] - 1)
         self.umbilicisCoronalSpinBox.setMaximum(self.fatImage.shape[1] - 1)
 
     def getData(self):
@@ -247,11 +247,11 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
         # DICOM uses LPS coordinate system which is converted to RAS in sliceWidget
         # We need to convert the X/Y coordinates back to LPS
         if event.inaxes:
-            event.xdata = self.fatImage.shape[0] - event.xdata
+            event.xdata = self.fatImage.shape[2] - event.xdata
             event.ydata = self.fatImage.shape[1] - event.ydata
 
     def transformX(self, x):
-        return self.fatImage.shape[0] - x
+        return self.fatImage.shape[2] - x
 
     def transformY(self, y):
         return self.fatImage.shape[1] - y
@@ -274,13 +274,13 @@ class ConfigureWindow(QDialog, configureWindow_WashUDixon_ui.Ui_ConfigureWindow)
             value = self.sliceSlider.value() - 1
 
             if value < 0:
-                value = self.fatImage.shape[2] - 1
+                value = self.fatImage.shape[0] - 1
 
             self.sliceSlider.setValue(value)
         elif event.key == 'right':
             value = self.sliceSlider.value() + 1
 
-            if value >= self.fatImage.shape[2]:
+            if value >= self.fatImage.shape[0]:
                 value = 0
 
             self.sliceSlider.setValue(value)

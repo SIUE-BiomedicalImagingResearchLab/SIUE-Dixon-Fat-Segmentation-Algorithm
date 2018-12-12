@@ -1,4 +1,5 @@
 import os
+import re
 import traceback
 
 from PyQt5.QtCore import *
@@ -56,6 +57,14 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
 
         settings.endGroup()
 
+    def selectFormatFromDirectory(self, directory):
+        match = re.match(r'^MF03([\d]*)[-_]((POST)|(PRE))', os.path.basename(directory))
+
+        format = (ScanFormat.WashUUnknown if int(match.group(1)) < 12 else ScanFormat.WashUDixon) \
+            if match else ScanFormat.TexasTechDixon
+
+        self.dataTypeComboBox.setCurrentIndex(format.value)
+
     @pyqtSlot()
     def on_browseSourceButton_clicked(self):
         directories = FileDialog.getExistingDirectories(self, 'Select source folders of subjects', self.defaultOpenPath)
@@ -81,6 +90,11 @@ class MainWindow(QMainWindow, mainWindow_ui.Ui_MainWindow):
         if self.sourceModel.rowCount() > 0 and not self.sourceListView.currentIndex().isValid():
             self.sourceListView.setCurrentIndex(self.sourceModel.index(0, 0))
             self.sourceListView.setFocus()
+
+        # Select the appropriate data format based on directory contents
+        # Only do this if this is the first item added, makes it easier for the user not to have to change this
+        if self.sourceModel.rowCount() > 0:
+            self.selectFormatFromDirectory(directories[0])
 
         # If an error occurred, tell the user that the directory was not added
         if hasError:

@@ -57,7 +57,7 @@ class ConfigureWindow(QDialog, configureWindow_WashUUnknown_ui.Ui_ConfigureWindo
     def setupDefaults(self):
         self.sliceSlider.setValue(self.sliceWidget.sliceNumber)
         self.sliceSlider.setMinimum(0)
-        self.sliceSlider.setMaximum(self.image.shape[2] - 1)
+        self.sliceSlider.setMaximum(self.image.shape[0] - 1)
 
         self.sliceWidget.image = self.image
         self.noneRadioButton.setChecked(True)
@@ -98,10 +98,10 @@ class ConfigureWindow(QDialog, configureWindow_WashUUnknown_ui.Ui_ConfigureWindo
             self.leftArmBounds = []
             self.rightArmBounds = []
 
-        self.umbilicisInferiorSpinBox.setMaximum(self.image.shape[2] - 1)
-        self.umbilicisSuperiorSpinBox.setMaximum(self.image.shape[2] - 1)
-        self.umbilicisLeftSpinBox.setMaximum(self.image.shape[0] - 1)
-        self.umbilicisRightSpinBox.setMaximum(self.image.shape[0] - 1)
+        self.umbilicisInferiorSpinBox.setMaximum(self.image.shape[0] - 1)
+        self.umbilicisSuperiorSpinBox.setMaximum(self.image.shape[0] - 1)
+        self.umbilicisLeftSpinBox.setMaximum(self.image.shape[2] - 1)
+        self.umbilicisRightSpinBox.setMaximum(self.image.shape[2] - 1)
         self.umbilicisCoronalSpinBox.setMaximum(self.image.shape[1] - 1)
 
     def getData(self):
@@ -230,11 +230,11 @@ class ConfigureWindow(QDialog, configureWindow_WashUUnknown_ui.Ui_ConfigureWindo
         # DICOM uses LPS coordinate system which is converted to RAS in sliceWidget
         # We need to convert the X/Y coordinates back to LPS
         if event.inaxes:
-            event.xdata = self.image.shape[0] - event.xdata
+            event.xdata = self.image.shape[2] - event.xdata
             event.ydata = self.image.shape[1] - event.ydata
 
     def transformX(self, x):
-        return self.image.shape[0] - x
+        return self.image.shape[2] - x
 
     def transformY(self, y):
         return self.image.shape[1] - y
@@ -257,13 +257,13 @@ class ConfigureWindow(QDialog, configureWindow_WashUUnknown_ui.Ui_ConfigureWindo
             value = self.sliceSlider.value() - 1
 
             if value < 0:
-                value = self.image.shape[2] - 1
+                value = self.image.shape[0] - 1
 
             self.sliceSlider.setValue(value)
         elif event.key == 'right':
             value = self.sliceSlider.value() + 1
 
-            if value >= self.image.shape[2]:
+            if value >= self.image.shape[0]:
                 value = 0
 
             self.sliceSlider.setValue(value)

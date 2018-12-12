@@ -58,14 +58,14 @@ class ConfigureWindow(QDialog, configureWindow_TexasTechDixon_ui.Ui_ConfigureWin
 
         self.sliceSlider.setValue(self.sliceWidget.sliceNumber)
         self.sliceSlider.setMinimum(0)
-        self.sliceSlider.setMaximum(self.fatImage.shape[2] - 1)
+        self.sliceSlider.setMaximum(self.fatImage.shape[0] - 1)
 
         self.viewFatRadioButton.setChecked(True)
         self.sliceWidget.image = self.fatImage
         self.noneRadioButton.setChecked(True)
 
         diaphragmTag = configRoot.find('diaphragm')
-        self.diaphragmAxialSpinBox.setMaximum(self.fatImage.shape[2] - 1)
+        self.diaphragmAxialSpinBox.setMaximum(self.fatImage.shape[0] - 1)
         if diaphragmTag is not None and diaphragmTag.attrib['superiorSlice'] is not None:
             self.diaphragmAxialSpinBox.setValue(int(configRoot.find('diaphragm').attrib['superiorSlice']))
         self.sliceWidget.diaphragmAxial = self.diaphragmAxialSpinBox.value()
@@ -78,10 +78,10 @@ class ConfigureWindow(QDialog, configureWindow_TexasTechDixon_ui.Ui_ConfigureWin
             self.umbilicisRightSpinBox.setValue(int(umbilicisTag.attrib['right']))
             self.umbilicisCoronalSpinBox.setValue(int(umbilicisTag.attrib['coronal']))
 
-        self.umbilicisInferiorSpinBox.setMaximum(self.fatImage.shape[2] - 1)
-        self.umbilicisSuperiorSpinBox.setMaximum(self.fatImage.shape[2] - 1)
-        self.umbilicisLeftSpinBox.setMaximum(self.fatImage.shape[0] - 1)
-        self.umbilicisRightSpinBox.setMaximum(self.fatImage.shape[0] - 1)
+        self.umbilicisInferiorSpinBox.setMaximum(self.fatImage.shape[0] - 1)
+        self.umbilicisSuperiorSpinBox.setMaximum(self.fatImage.shape[0] - 1)
+        self.umbilicisLeftSpinBox.setMaximum(self.fatImage.shape[2] - 1)
+        self.umbilicisRightSpinBox.setMaximum(self.fatImage.shape[2] - 1)
         self.umbilicisCoronalSpinBox.setMaximum(self.fatImage.shape[1] - 1)
         self.sliceWidget.umbilicisInferior = self.umbilicisInferiorSpinBox.value()
         self.sliceWidget.umbilicisSuperior = self.umbilicisSuperiorSpinBox.value()
@@ -302,13 +302,13 @@ class ConfigureWindow(QDialog, configureWindow_TexasTechDixon_ui.Ui_ConfigureWin
             value = self.sliceSlider.value() - 1
 
             if value < 0:
-                value = self.fatImage.shape[2] - 1
+                value = self.fatImage.shape[0] - 1
 
             self.sliceSlider.setValue(value)
         elif event.key == 'right':
             value = self.sliceSlider.value() + 1
 
-            if value >= self.fatImage.shape[2]:
+            if value >= self.fatImage.shape[0]:
                 value = 0
 
             self.sliceSlider.setValue(value)

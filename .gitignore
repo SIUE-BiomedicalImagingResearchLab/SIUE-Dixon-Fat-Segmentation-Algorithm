@@ -119,3 +119,6 @@ dictionaries/
 
 # Ignore generated files
 generated
+
+# Ignore VS Code related files
+.vscode

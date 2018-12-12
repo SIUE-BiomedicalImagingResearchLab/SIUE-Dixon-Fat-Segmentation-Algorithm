@@ -62,7 +62,7 @@ class SliceWidget(FigureCanvas):
 
         # Draw the image if it is set
         if self.image is not None:
-            image = self.image[:, :, self.sliceNumber].T
+            image = self.image[self.sliceNumber, :, :]
 
             # For viewing, we use right-anterior-superior (RAS) system. This is the same system that PATS uses.
             # For LPS volumes, we reverse the x/y axes to go from LPS to RAS.
@@ -98,7 +98,7 @@ class SliceWidget(FigureCanvas):
                 anterior = int(np.round(np.interp(self.sliceNumber, np.array([i[0] for i in CATLine]),
                                                   np.array([i[2] for i in CATLine]))))
 
-                x = self.image.shape[0] // 3
+                x = self.image.shape[2] // 3
                 y = posterior
                 width = 75
                 height = 1

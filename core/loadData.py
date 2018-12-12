@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 
@@ -11,7 +12,8 @@ from util import constants
 from util import pydicomext
 from util.enums import ScanFormat
 from util.pydicomext import MethodType
-from util.util import DCMIsMultiFrame
+
+logger = logging.getLogger(__name__)
 
 _data = {}
 
@@ -85,8 +87,8 @@ def _loadTexasTechDixonData(dataPath):
     waterLowerImage = niiWaterLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
 
     # Piece together the upper and lower parts of the fat and water images into one volume
-    fatImage = np.concatenate((fatLowerImage, fatUpperImage), axis=2)
-    waterImage = np.concatenate((waterLowerImage, waterUpperImage), axis=2)
+    fatImage = np.concatenate((fatLowerImage.T, fatUpperImage.T), axis=0)
+    waterImage = np.concatenate((waterLowerImage.T, waterUpperImage.T), axis=0)
 
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
     fatImage = skimage.exposure.rescale_intensity(fatImage.astype(float), out_range=(0.0, 1.0))
@@ -97,9 +99,9 @@ def _loadTexasTechDixonData(dataPath):
 
     # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
     constants.nrrdHeaderDict = {'space': 'right-anterior-superior'}
-    constants.nrrdHeaderDict['space directions'] = (niiFatUpper.header['srow_x'][0:-1],
-                                                    niiFatUpper.header['srow_y'][0:-1],
-                                                    niiFatUpper.header['srow_z'][0:-1])
+    constants.nrrdHeaderDict['space directions'] = np.hstack((niiFatUpper.header['srow_x'][0:-1, None],
+                                                              niiFatUpper.header['srow_y'][0:-1, None],
+                                                              niiFatUpper.header['srow_z'][0:-1, None]))
 
     constants.nrrdHeaderDict['space origin'] = (niiFatUpper.header['srow_x'][-1],
                                                 niiFatUpper.header['srow_y'][-1],
@@ -128,39 +130,42 @@ def _loadWashUUnknownData(dataPath):
     patient = dicomDir.only()
 
     # Series for unknown sequence containing abdominal information
-    imageSeries = None
+    series = None
 
     for _, study in patient.items():
-        for _, series in study.items():
+        for _, series_ in study.items():
             # Skip any series that do not match this name
-            if series.description.lower() != 't1_fl2d_tra_p3_256':
+            if series_.description.lower() != 't1_fl2d_tra_p3_256':
                 continue
 
             # Save series and break out of loop
-            imageSeries = series
+            series = series_
             break
 
-    if imageSeries is None:
+    if series is None:
+        logger.debug(series)
         raise ValueError('Invalid DICOM data given: Should contain series named \'t1_fl2d_tra_p3_256\'')
 
-    # Combine the image series to get a volume (along with metadata about that volume)
-    (method, space, orientation, spacing, origin, image) = pydicomext.combineSlices(imageSeries,
-                                                                                    MethodType.SliceLocation)
+    # Combine the series to get a volume
+    volume = series.combine(methods=MethodType.SliceLocation)
+
+    # Get Numpy array from volume
+    data = volume.data
 
     # Normalize the image so that the intensities are between 0.0->1.0 and also convert to float data type
-    image = skimage.exposure.rescale_intensity(image.astype(float), out_range=(0.0, 1.0))
-
-    # Image data is in Fortran memory order (rows, columns), swap axes to make it C order (x, y)
-    image = np.swapaxes(image, 0, 1)
+    data = skimage.exposure.rescale_intensity(data.astype(float), out_range=(0.0, 1.0))
 
     # Set constant pathDir to be the current data path to allow writing/reading from the current directory
     constants.pathDir = dataPath
 
     # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
-    constants.nrrdHeaderDict = {'space': space, 'space directions': orientation * spacing[:, None],
-                                'space origin': origin}
+    constants.nrrdHeaderDict = {
+        'space': volume.space,
+        'space directions': volume.orientation * volume.spacing[::-1, None],
+        'space origin': volume.origin
+    }
 
-    return image, config
+    return data, config
 
 
 def _loadWashUDixonData(dataPath):
@@ -212,37 +217,34 @@ def _loadWashUDixonData(dataPath):
     if len(fatSeries) != 2 or len(waterSeries) != 2:
         raise Exception('Invalid DICOM data given: Should only be an abdominal and thoracic fat and water image.')
 
-    if not (DCMIsMultiFrame(fatSeries[0]) == DCMIsMultiFrame(fatSeries[1]) == DCMIsMultiFrame(waterSeries[0]) ==
-            DCMIsMultiFrame(waterSeries[1])):
+    if not (fatSeries[0].isMultiFrame == fatSeries[1].isMultiFrame == waterSeries[0].isMultiFrame ==
+            waterSeries[1].isMultiFrame):
         raise Exception('Fat and water series should collectively use or don\'t use the multi-frame module')
 
-    if DCMIsMultiFrame(fatSeries[0]):
-        # TODO Determine which way these should be put together, could be reversed
-        fatImage = np.stack((fatSeries[0][0].pixel_array, fatSeries[1][0].pixel_array), axis=0).T
-        waterImage = np.stack((waterSeries[0][0].pixel_array, waterSeries[1][0].pixel_array), axis=0).T
-    else:
-        # Combine the two series into one large list of images
-        fatSeries = fatSeries[0] + fatSeries[1]
-        waterSeries = waterSeries[0] + waterSeries[1]
+    # Merge the two fat/water series into one series
+    fatSeries = pydicomext.mergeSeries(fatSeries)
+    waterSeries = pydicomext.mergeSeries(waterSeries)
 
-        # Combine the series to get the fat and water images
-        (method, space, orientation, spacing, origin, fatImage) = \
-            pydicomext.combineSlices(fatSeries, MethodType.SliceLocation)
-        (method, space, orientation, spacing, origin, waterImage) = \
-            pydicomext.combineSlices(waterSeries, MethodType.SliceLocation)
+    # Use the following method to combine the fat and water series
+    # Use slice location for standard DICOM but for enhanced DICOM use patient location
+    method = MethodType.MFPatientLocation if fatSeries.isMultiFrame else MethodType.SliceLocation
+
+    # Combine the fat and water series into a volume
+    fatVolume = fatSeries.combine(methods=method)
+    waterVolume = waterSeries.combine(methods=method)
 
     # Normalize the fat/water images so that the intensities are between (0.0, 1.0) and also converts to float data type
-    fatImage = skimage.exposure.rescale_intensity(fatImage.astype(float), out_range=(0.0, 1.0))
-    waterImage = skimage.exposure.rescale_intensity(waterImage.astype(float), out_range=(0.0, 1.0))
-
-    # Image data is in Fortran memory order (rows, columns), swap axes to make it C order (x, y)
-    fatImage, waterImage = np.swapaxes(fatImage, 0, 1), np.swapaxes(waterImage, 0, 1)
+    fatImage = skimage.exposure.rescale_intensity(fatVolume.data.astype(float), out_range=(0.0, 1.0))
+    waterImage = skimage.exposure.rescale_intensity(waterVolume.data.astype(float), out_range=(0.0, 1.0))
 
     # Set constant pathDir to be the current data path to allow writing/reading from the current directory
     constants.pathDir = dataPath
 
     # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
-    constants.nrrdHeaderDict = {'space': space, 'space directions': orientation * spacing[:, None],
-                                'space origin': origin}
+    constants.nrrdHeaderDict = {
+        'space': fatVolume.space,
+        'space directions': fatVolume.orientation * fatVolume.spacing[::-1, None],
+        'space origin': fatVolume.origin
+    }
 
     return fatImage, waterImage, config

@@ -117,11 +117,14 @@ def runSegmentation(data):
     tic = time.perf_counter()
     if os.path.exists(getDebugPath('imageBC.nrrd')):
         image, header = nrrd.read(getDebugPath('imageBC.nrrd'))
+
+        # Transpose image to get back into C-order indexing
+        image = image.T
     else:
         image = correctBias(image, shrinkFactor=constants.shrinkFactor, prefix='imageBiasCorrection')
 
         # If bias correction is performed, saved images to speed up algorithm in future runs
-        nrrd.write(getDebugPath('imageBC.nrrd'), image, constants.nrrdHeaderDict, compression_level=1)
+        nrrd.write(getDebugPath('imageBC.nrrd'), image.T, constants.nrrdHeaderDict, compression_level=1)
 
     toc = time.perf_counter()
     print('N4ITK bias field correction took %f seconds' % (toc - tic))
@@ -143,7 +146,7 @@ def runSegmentation(data):
     for slice in range(diaphragmAxialSlice):
         tic = time.perf_counter()
 
-        imageSlice = image[:, :, slice]
+        imageSlice = image[slice, :, :]
 
         # Segment image using K-means
         # labelOrder contains the labels sorted from smallest intensity to greatest
@@ -155,10 +158,10 @@ def runSegmentation(data):
         # This is a valid assumption but near the umbilicis, there is a discontinuity
         # so this draws a line near there to create a closed contour
         if umbilicisInferior <= slice <= umbilicisSuperior:
-            fatImageMask[umbilicisLeft:umbilicisRight, umbilicisCoronal] = True
+            fatImageMask[umbilicisCoronal, umbilicisLeft:umbilicisRight] = True
 
         # Save fat image mask for debugging
-        fatImageMasks[:, :, slice] = fatImageMask
+        fatImageMasks[slice, :, :] = fatImageMask
 
         # Get body mask by closing fat image mask to connect any small gaps (such as at umbilical cord)
         # Fill all holes which will create a solid body mask
@@ -216,39 +219,47 @@ def runSegmentation(data):
 
         # Remove any smaller objects and only keep the largest area object
         bodyMask = (bodyMaskLabels == sortedBodyMaskProps[0].label)
-        bodyMasks[:, :, slice] = bodyMask
+        bodyMasks[slice, :, :] = bodyMask
 
         fatVoidMask, abdominalMask, SCATSlice, VATSlice = segmentAbdomenSlice(slice, fatImageMask, bodyMask)
 
         # Save some data for debugging
-        fatVoidMasks[:, :, slice] = fatVoidMask
-        abdominalMasks[:, :, slice] = abdominalMask
-        SCAT[:, :, slice] = SCATSlice
-        VAT[:, :, slice] = VATSlice
+        fatVoidMasks[slice, :, :] = fatVoidMask
+        abdominalMasks[slice, :, :] = abdominalMask
+        SCAT[slice, :, :] = SCATSlice
+        VAT[slice, :, :] = VATSlice
 
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
     # Write out debug variables
+    # Note: All Numpy arrays are transposed before being written to NRRD file because the Numpy arrays are in C-order
+    # whereas the NRRD specification says that the arrays should be in Fortran-order.
+    # C-order means that you index the array as (z, y, x) where the first index is the slowest varying and the last
+    # index is fastest varying. Fortran-order, on the other hand is the direct opposite, where you index it as
+    # (x, y, z) with the first axis being the fastest varying and the last axis being the slowest varying.
+    # There are different benefits to each method and it's primarily a standard that programming languages pick. MATLAB
+    # & Fortran use Fortarn-ordered, while C and Python and other languages use C-order. C-order is used now because it
+    # is what is primarily used by many Python libraries, including Numpy.
     if constants.debug:
-        nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
-        nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
 
-        nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
-        nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
 
     # Save the results of adipose tissue segmentation and the original fat/water images
-    nrrd.write(getPath('image.nrrd'), skimage.img_as_ubyte(image), constants.nrrdHeaderDict, compression_level=1)
-    nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict, compression_level=1)
-    nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('image.nrrd'), skimage.img_as_ubyte(image).T, constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT).T, constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT).T, constants.nrrdHeaderDict, compression_level=1)
 
     # If desired, save the results in MATLAB
     if constants.saveMat:
-        scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT})
+        scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT.T, 'VAT': VAT.T})
 
     # Finish time of the segmentation algorithm
     timeEnded = time.perf_counter()

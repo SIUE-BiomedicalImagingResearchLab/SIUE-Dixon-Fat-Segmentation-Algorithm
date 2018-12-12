@@ -118,13 +118,16 @@ def runSegmentation(data):
     if os.path.exists(getDebugPath('fatImageBC.nrrd')) and os.path.exists(getDebugPath('waterImageBC.nrrd')):
         fatImage, header = nrrd.read(getDebugPath('fatImageBC.nrrd'))
         waterImage, header = nrrd.read(getDebugPath('waterImageBC.nrrd'))
+
+        # Transpose image to get back into C-order indexing
+        fatImage, waterImage = fatImage.T, waterImage.T
     else:
         fatImage = correctBias(fatImage, shrinkFactor=constants.shrinkFactor, prefix='fatImageBiasCorrection')
         waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor, prefix='waterImageBiasCorrection')
 
         # If bias correction is performed, saved images to speed up algorithm in future runs
-        nrrd.write(getDebugPath('fatImageBC.nrrd'), fatImage, constants.nrrdHeaderDict, compression_level=1)
-        nrrd.write(getDebugPath('waterImageBC.nrrd'), waterImage, constants.nrrdHeaderDict, compression_level=1)
+        nrrd.write(getDebugPath('fatImageBC.nrrd'), fatImage.T, constants.nrrdHeaderDict, compression_level=1)
+        nrrd.write(getDebugPath('waterImageBC.nrrd'), waterImage.T, constants.nrrdHeaderDict, compression_level=1)
 
     toc = time.perf_counter()
     print('N4ITK bias field correction took %f seconds' % (toc - tic))
@@ -147,8 +150,8 @@ def runSegmentation(data):
     for slice in range(diaphragmAxialSlice):
         tic = time.perf_counter()
 
-        fatImageSlice = fatImage[:, :, slice]
-        waterImageSlice = waterImage[:, :, slice]
+        fatImageSlice = fatImage[slice, :, :]
+        waterImageSlice = waterImage[slice, :, :]
 
         # Segment fat/water images using K-means
         # labelOrder contains the labels sorted from smallest intensity to greatest
@@ -162,11 +165,11 @@ def runSegmentation(data):
         # This is a valid assumption but near the umbilicis, there is a discontinuity
         # so this draws a line near there to create a closed contour
         if umbilicisInferior <= slice <= umbilicisSuperior:
-            fatImageMask[umbilicisLeft:umbilicisRight, umbilicisCoronal] = True
+            fatImageMask[umbilicisCoronal, umbilicisLeft:umbilicisRight] = True
 
         # Save fat and water masks for debugging
-        fatImageMasks[:, :, slice] = fatImageMask
-        waterImageMasks[:, :, slice] = waterImageMask
+        fatImageMasks[slice, :, :] = fatImageMask
+        waterImageMasks[slice, :, :] = waterImageMask
 
         # Get body mask by combining fat and water masks
         # Apply some closing to the image mask to connect any small gaps (such as at umbilical cord)
@@ -226,44 +229,52 @@ def runSegmentation(data):
 
         # Remove any smaller objects and only keep the largest area object
         bodyMask = (bodyMaskLabels == sortedBodyMaskProps[0].label)
-        bodyMasks[:, :, slice] = bodyMask
+        bodyMasks[slice, :, :] = bodyMask
 
         fatVoidMask, abdominalMask, SCATSlice, VATSlice = segmentAbdomenSlice(slice, fatImageMask, waterImageMask,
                                                                               bodyMask)
 
         # Save some data for debugging
-        fatVoidMasks[:, :, slice] = fatVoidMask
-        abdominalMasks[:, :, slice] = abdominalMask
-        SCAT[:, :, slice] = SCATSlice
-        VAT[:, :, slice] = VATSlice
+        fatVoidMasks[slice, :, :] = fatVoidMask
+        abdominalMasks[slice, :, :] = abdominalMask
+        SCAT[slice, :, :] = SCATSlice
+        VAT[slice, :, :] = VATSlice
 
         toc = time.perf_counter()
         print('Completed slice %i in %f seconds' % (slice, toc - tic))
 
     # Write out debug variables
+    # Note: All Numpy arrays are transposed before being written to NRRD file because the Numpy arrays are in C-order
+    # whereas the NRRD specification says that the arrays should be in Fortran-order.
+    # C-order means that you index the array as (z, y, x) where the first index is the slowest varying and the last
+    # index is fastest varying. Fortran-order, on the other hand is the direct opposite, where you index it as
+    # (x, y, z) with the first axis being the fastest varying and the last axis being the slowest varying.
+    # There are different benefits to each method and it's primarily a standard that programming languages pick. MATLAB
+    # & Fortran use Fortarn-ordered, while C and Python and other languages use C-order. C-order is used now because it
+    # is what is primarily used by many Python libraries, including Numpy.
     if constants.debug:
-        nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
-        nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
-        nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
 
-        nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('fatVoidMask.nrrd'), skimage.img_as_ubyte(fatVoidMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
-        nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks), constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('abdominalMask.nrrd'), skimage.img_as_ubyte(abdominalMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
 
     # Save the results of adipose tissue segmentation and the original fat/water images
-    nrrd.write(getPath('fatImage.nrrd'), skimage.img_as_ubyte(fatImage), constants.nrrdHeaderDict, compression_level=1)
-    nrrd.write(getPath('waterImage.nrrd'), skimage.img_as_ubyte(waterImage), constants.nrrdHeaderDict,
+    nrrd.write(getPath('fatImage.nrrd'), skimage.img_as_ubyte(fatImage).T, constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('waterImage.nrrd'), skimage.img_as_ubyte(waterImage).T, constants.nrrdHeaderDict,
                compression_level=1)
-    nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT), constants.nrrdHeaderDict, compression_level=1)
-    nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT), constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT).T, constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('VAT.nrrd'), skimage.img_as_ubyte(VAT).T, constants.nrrdHeaderDict, compression_level=1)
 
     # If desired, save the results in MATLAB
     if constants.saveMat:
-        scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT, 'VAT': VAT})
+        scipy.io.savemat(getPath('results.mat'), mdict={'SCAT': SCAT.T, 'VAT': VAT.T})
 
     # Finish time of the segmentation algorithm
     timeEnded = time.perf_counter()

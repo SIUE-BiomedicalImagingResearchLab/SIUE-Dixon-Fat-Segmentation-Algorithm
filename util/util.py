@@ -13,29 +13,6 @@ def kmeans(image, k, isVector=False):
     return labelOrder, centroids, labels.reshape(image.shape[:-1] if isVector else image.shape)
 
 
-def fuseImageFalseColor(image1, image2):
-    result = np.dstack((image2, image1, image2))
-
-    return result
-
-
-def nearestNonzeroIdx(array, x, y, includeCurrent=False):
-    if includeCurrent:
-        prevValue = array[x, y]
-        array[x, y] = 0
-
-    r, c = np.nonzero(array)
-    ((r - x) ** 2 + (c - y) ** 2).argmin()
-
-    a[x, y] = tmp
-    min_idx = ((r - x) ** 2 + (c - y) ** 2).argmin()
-
-    if includeCurrent:
-        array[x, y] = prevValue
-
-    return r[min_idx], c[min_idx]
-
-
 def maxargwhere(array, axis=0):
     def func(a):
         x = np.argwhere(a)
@@ -68,5 +45,3 @@ def nearestargwhere(array, index=0, axis=0):
 def defaultmin(x, default):
     return default if x.size == 0 else x.min()
 
-def DCMIsMultiFrame(series):
-    return len(series) == 1 and 'NumberOfFrames' in series[0]
