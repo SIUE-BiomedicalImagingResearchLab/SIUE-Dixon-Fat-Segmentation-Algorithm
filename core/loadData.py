@@ -161,7 +161,7 @@ def _loadWashUUnknownData(dataPath):
     # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
     constants.nrrdHeaderDict = {
         'space': volume.space,
-        'space directions': volume.orientation * volume.spacing[::-1, None],
+        'space directions': volume.orientation * volume.spacing[:, None],
         'space origin': volume.origin
     }
 
@@ -243,7 +243,7 @@ def _loadWashUDixonData(dataPath):
     # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
     constants.nrrdHeaderDict = {
         'space': fatVolume.space,
-        'space directions': fatVolume.orientation * fatVolume.spacing[::-1, None],
+        'space directions': fatVolume.orientation * fatVolume.spacing[:, None],
         'space origin': fatVolume.origin
     }
 
