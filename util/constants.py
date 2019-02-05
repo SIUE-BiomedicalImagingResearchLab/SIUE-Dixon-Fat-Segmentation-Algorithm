@@ -52,3 +52,6 @@ saveMat = False
 # Constant variables that are set in another function
 pathDir = None
 nrrdHeaderDict = None
+
+# Whether or not to force regeneration of the bias corrected images
+forceBiasCorrection = False

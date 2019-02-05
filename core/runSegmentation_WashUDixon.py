@@ -115,7 +115,8 @@ def runSegmentation(data):
     # Perform bias correction on MRI images to remove inhomogeneity
     # If bias correction has been performed already, then load the saved data
     tic = time.perf_counter()
-    if os.path.exists(getDebugPath('fatImageBC.nrrd')) and os.path.exists(getDebugPath('waterImageBC.nrrd')):
+    if not constants.forceBiasCorrection and os.path.exists(getDebugPath('fatImageBC.nrrd')) and os.path.exists(
+            getDebugPath('waterImageBC.nrrd')):
         fatImage, header = nrrd.read(getDebugPath('fatImageBC.nrrd'))
         waterImage, header = nrrd.read(getDebugPath('waterImageBC.nrrd'))
 
@@ -255,7 +256,8 @@ def runSegmentation(data):
     if constants.debug:
         nrrd.write(getDebugPath('fatImageMask.nrrd'), skimage.img_as_ubyte(fatImageMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
-        nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks).T, constants.nrrdHeaderDict,
+        nrrd.write(getDebugPath('waterImageMask.nrrd'), skimage.img_as_ubyte(waterImageMasks).T,
+                   constants.nrrdHeaderDict,
                    compression_level=1)
         nrrd.write(getDebugPath('bodyMask.nrrd'), skimage.img_as_ubyte(bodyMasks).T, constants.nrrdHeaderDict,
                    compression_level=1)
@@ -266,7 +268,8 @@ def runSegmentation(data):
                    compression_level=1)
 
     # Save the results of adipose tissue segmentation and the original fat/water images
-    nrrd.write(getPath('fatImage.nrrd'), skimage.img_as_ubyte(fatImage).T, constants.nrrdHeaderDict, compression_level=1)
+    nrrd.write(getPath('fatImage.nrrd'), skimage.img_as_ubyte(fatImage).T, constants.nrrdHeaderDict,
+               compression_level=1)
     nrrd.write(getPath('waterImage.nrrd'), skimage.img_as_ubyte(waterImage).T, constants.nrrdHeaderDict,
                compression_level=1)
     nrrd.write(getPath('SCAT.nrrd'), skimage.img_as_ubyte(SCAT).T, constants.nrrdHeaderDict, compression_level=1)

@@ -52,12 +52,19 @@ def _loadTexasTechDixonData(dataPath):
     niiFatLowerFilename = os.path.join(dataPath, 'fatLower.nii')
     niiWaterUpperFilename = os.path.join(dataPath, 'waterUpper.nii')
     niiWaterLowerFilename = os.path.join(dataPath, 'waterLower.nii')
-    configFilename = os.path.join(dataPath, 'config.xml')
+    configFilename = os.path.join(dataPath, 'config.yml')
 
-    if not (os.path.isfile(niiFatUpperFilename) and os.path.isfile(niiFatLowerFilename) and \
-            os.path.isfile(niiWaterUpperFilename) and os.path.isfile(niiWaterLowerFilename) and \
-            os.path.isfile(configFilename)):
+    if not (os.path.isfile(niiFatUpperFilename) and os.path.isfile(niiFatLowerFilename) and
+            os.path.isfile(niiWaterUpperFilename) and os.path.isfile(niiWaterLowerFilename)):
         raise Exception('Missing required files from source path folder.')
+
+    # Load the configuration file if it exists
+    if os.path.exists(configFilename):
+        with open(configFilename, 'r') as fh:
+            config = yaml.load(fh)
+    else:
+        # Otherwise create the config as an empty dictionary
+        config = {}
 
     # Load unrectified NIFTI files for the current dataPath
     niiFatUpper = nib.load(niiFatUpperFilename)
@@ -65,26 +72,49 @@ def _loadTexasTechDixonData(dataPath):
     niiWaterUpper = nib.load(niiWaterUpperFilename)
     niiWaterLower = nib.load(niiWaterLowerFilename)
 
-    # Load config XML file
-    config = etree.parse(configFilename)
+    # Affine matrix, origin & spacing for upper image. Fat & water should have same info
+    upperAffineMatrixWT = niiFatUpper.header.get_best_affine()
+    upperAffineMatrix = np.array(upperAffineMatrixWT[:-1, :-1])
+    upperOrigin = np.array(upperAffineMatrixWT[:-1, -1])
+    spacing = np.linalg.norm(upperAffineMatrix, axis=1)
 
-    # Get the root of the config XML file
-    configRoot = config.getroot()
+    # -1 for flipped axes and 1 for non-flipped axes (RAS)
+    axesFlipped = np.where(np.diag(upperAffineMatrix) > 0, 1, -1)
 
-    # Piece together upper and lower images for fat and water
-    # Retrieve the inferior and superior axial slice from config file for upper and lower images
-    imageUpperTag = configRoot.find('imageUpper')
-    imageLowerTag = configRoot.find('imageLower')
-    imageUpperInferiorSlice = int(imageUpperTag.attrib['inferiorSlice'])
-    imageUpperSuperiorSlice = int(imageUpperTag.attrib['superiorSlice'])
-    imageLowerInferiorSlice = int(imageLowerTag.attrib['inferiorSlice'])
-    imageLowerSuperiorSlice = int(imageLowerTag.attrib['superiorSlice'])
+    # Odd hacks here to get the right amount of offset, this only applies to the listed subjects
+    # No idea why
+    # Toggle the axes flipped from 1 to -1 or -1 to 1. This way it will shift the opposite direction
+    if os.path.basename(dataPath) in ['Subject0003_Final', 'Subject0003_Initial']:
+        axesFlipped[0] *= -1
+
+    # Affine matrix, origin & spacing for lower image. Fat & water should have same info
+    lowerAffineMatrixWT = niiFatLower.header.get_best_affine()
+    lowerAffineMatrix = np.array(lowerAffineMatrixWT[:-1, :-1])
+    lowerOrigin = np.array(lowerAffineMatrixWT[:-1, -1])
 
     # Use inferior and superior axial slice to obtain the valid portion of the upper and lower fat and water images
-    fatUpperImage = niiFatUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    fatLowerImage = niiFatLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
-    waterUpperImage = niiWaterUpper.get_data()[:, :, imageUpperInferiorSlice:imageUpperSuperiorSlice]
-    waterLowerImage = niiWaterLower.get_data()[:, :, imageLowerInferiorSlice:imageLowerSuperiorSlice]
+    fatUpperImage, fatLowerImage = niiFatUpper.get_data(), niiFatLower.get_data()
+    waterUpperImage, waterLowerImage = niiWaterUpper.get_data(), niiWaterLower.get_data()
+
+    # Take lower origin and subtract from the upper origin and divide by spacing
+    # For the Z dimension we want to add the fat lower shape to get the amount of slices that overlap
+    # Then convert to integer after rounding down to get the number of indices to shift to align
+    misalignedIndexAmount = np.floor((lowerOrigin - upperOrigin) / (spacing * axesFlipped) +
+                                     (0, 0, fatLowerImage.shape[2])).astype(int)
+
+    if misalignedIndexAmount[2] > 0:
+        fatLowerImage = fatLowerImage[:, :, :-misalignedIndexAmount[2]]
+        waterLowerImage = waterLowerImage[:, :, :-misalignedIndexAmount[2]]
+
+    if misalignedIndexAmount[1] != 0:
+        # Roll the fat upper image back the difference amount to align better to lower image
+        fatLowerImage = np.roll(fatLowerImage, misalignedIndexAmount[1], axis=1)
+        waterLowerImage = np.roll(waterLowerImage, misalignedIndexAmount[1], axis=1)
+
+    if misalignedIndexAmount[0] != 0:
+        # Roll the fat upper image back the difference amount to align better to lower image
+        fatLowerImage = np.roll(fatLowerImage, misalignedIndexAmount[0], axis=0)
+        waterLowerImage = np.roll(waterLowerImage, misalignedIndexAmount[0], axis=0)
 
     # Piece together the upper and lower parts of the fat and water images into one volume
     fatImage = np.concatenate((fatLowerImage.T, fatUpperImage.T), axis=0)
@@ -98,14 +128,11 @@ def _loadTexasTechDixonData(dataPath):
     constants.pathDir = dataPath
 
     # Create a NRRD header dictionary that will be used to save the intermediate debug NRRDs to view progress
-    constants.nrrdHeaderDict = {'space': 'right-anterior-superior'}
-    constants.nrrdHeaderDict['space directions'] = np.hstack((niiFatUpper.header['srow_x'][0:-1, None],
-                                                              niiFatUpper.header['srow_y'][0:-1, None],
-                                                              niiFatUpper.header['srow_z'][0:-1, None]))
-
-    constants.nrrdHeaderDict['space origin'] = (niiFatUpper.header['srow_x'][-1],
-                                                niiFatUpper.header['srow_y'][-1],
-                                                niiFatUpper.header['srow_z'][-1])
+    constants.nrrdHeaderDict = {
+        'space': 'right-anterior-superior',
+        'space directions': upperAffineMatrix,
+        'space origin': lowerOrigin
+    }
 
     return fatImage, waterImage, config
 

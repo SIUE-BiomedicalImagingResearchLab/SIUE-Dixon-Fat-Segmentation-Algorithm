@@ -201,31 +201,19 @@ def runSegmentation(data):
     # The bias corrected fat and water images are going to be created in this directory regardless of debug constant
     os.makedirs(getDebugPath(''), exist_ok=True)
 
-    # Get the root of the config XML file
-    configRoot = config.getroot()
+    # Load values from config dictionary
+    diaphragmAxial = config['diaphragmAxial']
+    umbilicis = config['umbilicis']
+    umbilicisInferior = umbilicis['inferior']
+    umbilicisSuperior = umbilicis['superior']
+    umbilicisLeft = umbilicis['left']
+    umbilicisRight = umbilicis['right']
+    umbilicisCoronal = umbilicis['coronal']
 
-    diaphragmSuperiorSlice = int(configRoot.find('diaphragm').attrib['superiorSlice'])
-    umbilicisTag = configRoot.find('umbilicis')
-    umbilicisInferiorSlice = int(umbilicisTag.attrib['inferiorSlice'])
-    umbilicisSuperiorSlice = int(umbilicisTag.attrib['superiorSlice'])
-    umbilicisLeft = int(umbilicisTag.attrib['left'])
-    umbilicisRight = int(umbilicisTag.attrib['right'])
-    umbilicisCoronal = int(umbilicisTag.attrib['coronal'])
-
-    # Load cardiac adipose tissue (CAT) tag and corresponding lines in axial plane
-    CATTag = configRoot.find('CAT')
-    CATAxial = []
-    CATPosterior = []
-    CATAnterior = []
-    # Foreach line in the CAT tag, append to the three arrays
-    for line in CATTag:
-        if line.tag != 'line':
-            print('Invalid tag for CAT, must be line')
-            continue
-
-        CATAxial.append(int(line.attrib['axial']))
-        CATPosterior.append(int(line.attrib['posterior']))
-        CATAnterior.append(int(line.attrib['anterior']))
+    CATBounds = list([(x['axial'], x['posterior'], x['anterior']) for x in config['CATBounds']])
+    CATAxial = list([x[0] for x in CATBounds])
+    CATPosterior = list([x[1] for x in CATBounds])
+    CATAnterior = list([x[2] for x in CATBounds])
 
     # Convert three arrays to NumPy and get minimum/maximum axial slice
     # The min/max axial slice is used to determine the start and stopping point
@@ -245,9 +233,10 @@ def runSegmentation(data):
     # Perform bias correction on MRI images to remove inhomogeneity
     # If bias correction has been performed already, then load the saved data
     tic = time.perf_counter()
-    if os.path.exists(getDebugPath('fatImageBC.nrrd')) and os.path.exists(getDebugPath('waterImageBC.nrrd')):
-        fatImage, header = nrrd.read(getDebugPath('fatImageBC.nrrd'))
-        waterImage, header = nrrd.read(getDebugPath('waterImageBC.nrrd'))
+    if not constants.forceBiasCorrection and os.path.exists(getPath('fatImage.nrrd')) and os.path.exists(
+            getPath('waterImage.nrrd')):
+        fatImage, header = nrrd.read(getPath('fatImage.nrrd'))
+        waterImage, header = nrrd.read(getPath('waterImage.nrrd'))
 
         # Transpose image to get back into C-order indexing
         fatImage, waterImage = fatImage.T, waterImage.T
@@ -256,8 +245,8 @@ def runSegmentation(data):
         waterImage = correctBias(waterImage, shrinkFactor=constants.shrinkFactor, prefix='waterImageBiasCorrection')
 
         # If bias correction is performed, saved images to speed up algorithm in future runs
-        nrrd.write(getDebugPath('fatImageBC.nrrd'), fatImage.T, constants.nrrdHeaderDict)
-        nrrd.write(getDebugPath('waterImageBC.nrrd'), waterImage.T, constants.nrrdHeaderDict)
+        nrrd.write(getPath('fatImage.nrrd'), fatImage.T, constants.nrrdHeaderDict)
+        nrrd.write(getPath('waterImage.nrrd'), waterImage.T, constants.nrrdHeaderDict)
 
     toc = time.perf_counter()
     print('N4ITK bias field correction took %f seconds' % (toc - tic))
@@ -279,7 +268,7 @@ def runSegmentation(data):
     CAT = np.zeros(fatImage.shape, bool)
 
     for slice in range(0, fatImage.shape[0]):
-    # for slice in range(diaphragmSuperiorSlice, fatImage.shape[0]):
+        # for slice in range(diaphragmSuperiorSlice, fatImage.shape[0]):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[slice, :, :]
@@ -296,7 +285,7 @@ def runSegmentation(data):
         # Algorithm assumes that the skin is a closed contour and fully connects
         # This is a valid assumption but near the umbilicis, there is a discontinuity
         # so this draws a line near there to create a closed contour
-        if umbilicisInferiorSlice <= slice <= umbilicisSuperiorSlice:
+        if umbilicisInferior <= slice <= umbilicisSuperior:
             fatImageMask[umbilicisCoronal, umbilicisLeft:umbilicisRight] = True
 
         # Save fat and water masks for debugging
@@ -313,7 +302,7 @@ def runSegmentation(data):
         bodyMasks[slice, :, :] = bodyMask
 
         # Superior of diaphragm is divider between thoracic and abdominal region
-        if slice < diaphragmSuperiorSlice:
+        if slice < diaphragmAxial:
             fatVoidMask, abdominalMask, SCATSlice, VATSlice = \
                 segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask)
 

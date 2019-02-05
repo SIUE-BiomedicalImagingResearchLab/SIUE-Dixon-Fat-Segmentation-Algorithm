@@ -115,7 +115,7 @@ def runSegmentation(data):
     # Perform bias correction on MRI images to remove inhomogeneity
     # If bias correction has been performed already, then load the saved data
     tic = time.perf_counter()
-    if os.path.exists(getDebugPath('imageBC.nrrd')):
+    if not constants.forceBiasCorrection and os.path.exists(getDebugPath('imageBC.nrrd')):
         image, header = nrrd.read(getDebugPath('imageBC.nrrd'))
 
         # Transpose image to get back into C-order indexing

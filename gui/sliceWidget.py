@@ -44,6 +44,7 @@ class SliceWidget(FigureCanvas):
         FigureCanvas.updateGeometry(self)
 
         self.isLPS = False
+        self.isLAS = False
         self.image = None
         self.sliceNumber = 0
         self.diaphragmAxial = None
@@ -66,8 +67,11 @@ class SliceWidget(FigureCanvas):
 
             # For viewing, we use right-anterior-superior (RAS) system. This is the same system that PATS uses.
             # For LPS volumes, we reverse the x/y axes to go from LPS to RAS.
+            # Also, TTU data is in LAS which is odd but handle that too
             if self.isLPS:
                 image = image[::-1, ::-1]
+            elif self.isLAS:
+                image = image[:, ::-1]
 
             self.axes.imshow(image, cmap='gray', origin='lower')
 
@@ -98,7 +102,7 @@ class SliceWidget(FigureCanvas):
                 anterior = int(np.round(np.interp(self.sliceNumber, np.array([i[0] for i in CATLine]),
                                                   np.array([i[2] for i in CATLine]))))
 
-                x = self.image.shape[2] // 3
+                x = self.image.shape[2] // 2.5
                 y = posterior
                 width = 75
                 height = 1
