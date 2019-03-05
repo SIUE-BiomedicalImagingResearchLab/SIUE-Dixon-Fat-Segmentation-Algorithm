@@ -39,7 +39,15 @@ def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
     # List of polygons to draw on the fat void mask in order to correct issues
     fatVoidCorrections = []
 
-    if constants.subjectName == 'MF0323-PRE':
+    if constants.subjectName == 'MF0322-PRE':
+        fatVoidCorrections = [
+            # ([Inferior Slice, Superior Slice], List of polygons)
+            ([66, 77], [
+                [[228, 74], [171, 44], [174, 59], [219, 89]],
+                [[105, 40], [50, 67], [58, 82], [106, 55]]
+            ])
+        ]
+    elif constants.subjectName == 'MF0323-PRE':
         fatVoidCorrections = [
             # ([Inferior Slice, Superior Slice], List of polygons)
             ([67, 79], [
@@ -57,6 +65,14 @@ def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
             ([60, 79], [
                 [[253, 49], [169, 19], [154, 40], [236, 96]],
                 [[90, 10], [7, 62], [32, 95], [111, 41]]
+            ])
+        ]
+    elif constants.subjectName == 'MF0325-PRE':
+        fatVoidCorrections = [
+            # ([Inferior Slice, Superior Slice], List of polygons)
+            ([63, 79], [
+                [[248, 65], [189, 29], [172, 52], [229, 100]],
+                [[75, 41], [19, 76], [47, 100], [96, 55]]
             ])
         ]
 
@@ -183,9 +199,7 @@ def runSegmentation(data):
     # Loop from starting slice to the diaphragm slice
     # The diaphragm is what differentiates abdominal region from thoracic region and we just want the abdominal
     # statistics for WashU data because we have cardiac MRI scans for cardiac adipose tissue
-    # TODO Fix me
-    # for slice in range(diaphragmAxialSlice):
-    for slice in range(46, diaphragmAxialSlice):
+    for slice in range(diaphragmAxialSlice):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[slice, :, :]
