@@ -35,11 +35,38 @@ def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
 
     # This hack is to prevent the large voids in the mammary glands from causing the abdominal mask being wrong
     # TODO This hack should be implemented into the YAML file and should be configurable via PATS
-    if constants.subjectName == 'MF0323-PRE':
+    # ------------------------------------------------ BEGIN HACK ------------------------------------------------------
+    # List of polygons to draw on the fat void mask in order to correct issues
+    fatVoidCorrections = []
 
-        pass
+    if constants.subjectName == 'MF0323-PRE':
+        fatVoidCorrections = [
+            # ([Inferior Slice, Superior Slice], List of polygons)
+            ([67, 79], [
+                [[244, 70], [160, 20], [153, 49], [208, 99]],
+                [[95, 26], [12, 75], [49, 112], [106, 46]]
+            ]),
+            ([46, 66], [
+                [[242, 79], [160, 14], [143, 34], [220, 110]],
+                [[86, 18], [7, 90], [42, 113], [114, 38]]
+            ])
+        ]
     elif constants.subjectName == 'MF0324-PRE':
-        pass
+        fatVoidCorrections = [
+            # ([Inferior Slice, Superior Slice], List of polygons)
+            ([60, 79], [
+                [[253, 49], [169, 19], [154, 40], [236, 96]],
+                [[90, 10], [7, 62], [32, 95], [111, 41]]
+            ])
+        ]
+
+    for correction in fatVoidCorrections:
+        if slice >= correction[0][0] and slice <= correction[0][1]:
+            # Draw the polygons and turn into a binary image where True is within the polygons and False is outside of
+            binaryImageMask = draw.binaryFilledPolygon(correction[1], fatVoidMask.shape)
+            fatVoidMask = fatVoidMask & ~binaryImageMask
+            break
+    # ---------------------------------------------- END HACK HERE -----------------------------------------------------
 
     # Next, remove small objects based on their area
     # Size is the area threshold of objects to use. This number of pixels must be set in an object for it to stay.
@@ -156,7 +183,9 @@ def runSegmentation(data):
     # Loop from starting slice to the diaphragm slice
     # The diaphragm is what differentiates abdominal region from thoracic region and we just want the abdominal
     # statistics for WashU data because we have cardiac MRI scans for cardiac adipose tissue
-    for slice in range(diaphragmAxialSlice):
+    # TODO Fix me
+    # for slice in range(diaphragmAxialSlice):
+    for slice in range(46, diaphragmAxialSlice):
         tic = time.perf_counter()
 
         fatImageSlice = fatImage[slice, :, :]
