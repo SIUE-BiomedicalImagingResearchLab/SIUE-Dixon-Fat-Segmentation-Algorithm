@@ -33,6 +33,14 @@ def segmentAbdomenSlice(slice, fatImageMask, waterImageMask, bodyMask):
     fatBackgroundMask = ~scipy.ndimage.morphology.binary_fill_holes(fatImageMask)
     fatVoidMask = ~(fatBackgroundMask | fatImageMask)
 
+    # This hack is to prevent the large voids in the mammary glands from causing the abdominal mask being wrong
+    # TODO This hack should be implemented into the YAML file and should be configurable via PATS
+    if constants.subjectName == 'MF0323-PRE':
+
+        pass
+    elif constants.subjectName == 'MF0324-PRE':
+        pass
+
     # Next, remove small objects based on their area
     # Size is the area threshold of objects to use. This number of pixels must be set in an object for it to stay.
     # remove_small_objects is more desirable than using a simple binary_opening operation in this case because

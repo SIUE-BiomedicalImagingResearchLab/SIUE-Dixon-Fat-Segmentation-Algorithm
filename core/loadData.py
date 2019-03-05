@@ -274,4 +274,8 @@ def _loadWashUDixonData(dataPath):
         'space origin': fatVolume.origin
     }
 
+    # Retrieve the subject name so we can do hacky stuff on a per-subject basis
+    # TODO Remove me when I remove this hack!
+    constants.subjectName = os.path.splitext(os.path.basename(dataPath))[0]
+
     return fatImage, waterImage, config
